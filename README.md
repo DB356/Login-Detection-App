@@ -37,7 +37,7 @@ Based on predefined logic or a machine learning model, it classifies login attem
 
 ## 📦 Installation
 
-git clone https://github.com/your-username/login-detection-app.git  
+git clone https://github.com/DB356/login-detection-app.git  
 cd login-detection-app  
 pip install -r requirements.txt  
 streamlit run app.py  
