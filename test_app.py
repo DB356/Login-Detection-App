@@ -57,12 +57,14 @@ if "logged_in" not in st.session_state:
     st.session_state.username = ""
     st.session_state.role = ""
 
+if "menu" not in st.session_state:
+    st.session_state.menu = "Login"
+
 # ---------------- UI ----------------
 st.markdown("""
 <style>
-/* FIX CURSOR PROPERLY */
-[data-testid="stSidebar"] button,
-[data-testid="stSidebar"] div[role="button"] {
+/* ✅ FINAL CURSOR FIX (targets ALL clickable sidebar elements) */
+[data-testid="stSidebar"] * {
     cursor: pointer !important;
 }
 
@@ -105,8 +107,17 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ---------------- MENU ----------------
-menu = st.sidebar.selectbox("Menu", ["Login","Register","Dashboard","Logs"])
+# ---------------- MENU (CONTROLLED) ----------------
+menu_options = ["Login","Register","Dashboard","Logs"]
+
+menu = st.sidebar.selectbox(
+    "Menu",
+    menu_options,
+    index=menu_options.index(st.session_state.menu)
+)
+
+# keep sync
+st.session_state.menu = menu
 
 # ---------------- LOGIN ----------------
 if menu == "Login":
@@ -128,7 +139,9 @@ if menu == "Login":
 
             log_event(user, "SUCCESS")
 
-            st.success("Login successful. Now open Dashboard from menu.")
+            # ✅ FORCE REDIRECT
+            st.session_state.menu = "Dashboard"
+            st.rerun()
 
         else:
             log_event(user, "FAILED")
@@ -158,6 +171,7 @@ elif menu == "Dashboard":
 
     if st.button("Logout"):
         st.session_state.logged_in = False
+        st.session_state.menu = "Login"
         st.rerun()
 
     file = st.file_uploader("Upload Authentication Logs", type=["csv","xlsx"])
@@ -176,52 +190,15 @@ elif menu == "Dashboard":
         df["Anomaly_raw"] = model.predict(features)
         df["Risk Score"] = (-model.decision_function(features)).round(3)
 
-        def explain(row):
-            reasons = []
-            if row["Round-Trip Time [ms]"] > 500:
-                reasons.append("High latency")
-            if row["Login Successful"] == 0:
-                reasons.append("Failed login")
-            if row["Is Attack IP"] == 1:
-                reasons.append("Attack IP")
-            return ", ".join(reasons) if reasons else "Normal"
-
         df["Anomaly"] = df["Anomaly_raw"].apply(lambda x: "Suspicious" if x==-1 else "Normal")
-        df["Reason"] = df.apply(explain, axis=1)
 
-        def severity(score):
-            if score > 0.6:
-                return "High"
-            elif score > 0.3:
-                return "Medium"
-            else:
-                return "Low"
+        df["Reason"] = df.apply(lambda r:
+            ("High latency, " if r["Round-Trip Time [ms]"]>500 else "") +
+            ("Failed login, " if r["Login Successful"]==0 else "") +
+            ("Attack IP" if r["Is Attack IP"]==1 else "")
+        , axis=1)
 
-        df["Severity"] = df["Risk Score"].apply(severity)
-
-        suspicious = df[df["Anomaly"]=="Suspicious"]
-
-        st.metric("Suspicious Logins", len(suspicious))
-
-        st.dataframe(df[["User ID","Country","Anomaly","Risk Score","Severity","Reason"]])
-        st.dataframe(suspicious)
-
-        col1, col2 = st.columns(2)
-        with col1:
-            st.plotly_chart(px.pie(df, names="Login Successful"))
-        with col2:
-            st.plotly_chart(px.histogram(df, x="Round-Trip Time [ms]"))
-
-        # Timeline
-        df = df.reset_index(drop=True)
-        df["Time"] = pd.date_range(start="2024-01-01", periods=len(df), freq="min")
-        df["Suspicious"] = df["Anomaly"].apply(lambda x: 1 if x=="Suspicious" else 0)
-
-        st.plotly_chart(px.line(df, x="Time", y="Suspicious"))
-
-        # Download
-        csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button("Download Report", csv, "report.csv")
+        st.dataframe(df)
 
 # ---------------- LOGS ----------------
 elif menu == "Logs":
