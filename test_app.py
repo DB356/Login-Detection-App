@@ -7,239 +7,683 @@ import bcrypt
 import time
 import re
 
-st.set_page_config(page_title="DB Corp Security System", layout="wide")
+st.set_page_config(page_title=“DB Corp Security System”, layout=“wide”, page_icon=“🛡️”)
 
-# ---------------- DATABASE ----------------
-conn = sqlite3.connect("users.db", check_same_thread=False)
+# –––––––– DATABASE ––––––––
+
+conn = sqlite3.connect(“users.db”, check_same_thread=False)
 c = conn.cursor()
 
-c.execute("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password BLOB, role TEXT)")
-c.execute("CREATE TABLE IF NOT EXISTS logs (user TEXT, time TEXT, status TEXT)")
+c.execute(“CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password BLOB, role TEXT)”)
+c.execute(“CREATE TABLE IF NOT EXISTS logs (user TEXT, time TEXT, status TEXT)”)
 conn.commit()
 
 # 🔴 FORCE REMOVE OLD ADMIN (Cloud-safe)
-c.execute("DELETE FROM users WHERE username='admin'")
+
+c.execute(“DELETE FROM users WHERE username=‘admin’”)
 conn.commit()
 
-# ---------------- SECURITY ----------------
+# –––––––– SECURITY ––––––––
+
 def hash_password(password):
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
 
 def verify_password(password, hashed):
-    return bcrypt.checkpw(password.encode(), hashed)
+return bcrypt.checkpw(password.encode(), hashed)
 
 def log_event(user, status):
-    c.execute("INSERT INTO logs VALUES (?,?,?)", (user, time.ctime(), status))
-    conn.commit()
+c.execute(“INSERT INTO logs VALUES (?,?,?)”, (user, time.ctime(), status))
+conn.commit()
 
 def strong_password(p):
-    return len(p) >= 6 and re.search("[A-Z]", p) and re.search("[0-9]", p)
+return len(p) >= 6 and re.search(”[A-Z]”, p) and re.search(”[0-9]”, p)
 
-# ---------------- DEMO USER ----------------
-c.execute("SELECT COUNT(*) FROM users")
+# –––––––– DEMO USER ––––––––
+
+c.execute(“SELECT COUNT(*) FROM users”)
 if c.fetchone()[0] == 0:
-    c.execute("INSERT INTO users VALUES (?,?,?)", ("analyst", hash_password("soc123"), "analyst"))
-    conn.commit()
+c.execute(“INSERT INTO users VALUES (?,?,?)”, (“analyst”, hash_password(“soc123”), “analyst”))
+conn.commit()
 
-# ---------------- SESSION ----------------
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.username = ""
-    st.session_state.role = ""
-    st.session_state.login_attempts = 0
-    st.session_state.last_activity = time.time()
+# –––––––– SESSION ––––––––
 
-if "page" not in st.session_state:
-    st.session_state.page = "Login"
+if “logged_in” not in st.session_state:
+st.session_state.logged_in = False
+st.session_state.username = “”
+st.session_state.role = “”
+st.session_state.login_attempts = 0
+st.session_state.last_activity = time.time()
 
-# ---------------- SESSION TIMEOUT ----------------
+if “page” not in st.session_state:
+st.session_state.page = “Login”
+
+# –––––––– SESSION TIMEOUT ––––––––
+
 if st.session_state.logged_in:
-    if time.time() - st.session_state.last_activity > 600:
-        st.session_state.logged_in = False
-        st.warning("Session expired. Please login again.")
-        st.stop()
+if time.time() - st.session_state.last_activity > 600:
+st.session_state.logged_in = False
+st.session_state.page = “Login”
+st.warning(“Session expired. Please login again.”)
+st.stop()
 
 st.session_state.last_activity = time.time()
 
-# ---------------- UI ----------------
-st.markdown("""
+# –––––––– MODERN UI STYLES ––––––––
+
+st.markdown(”””
+
 <style>
-[data-testid="stSidebar"] * { cursor: pointer !important; }
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap');
 
-.cyber-header {
-font-size:28px;
-color:#22c55e;
-text-shadow:0 0 10px #22c55e;
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, [data-testid="stAppViewContainer"] {
+    background: #040d1a !important;
+    color: #e2e8f0 !important;
+    font-family: 'Syne', sans-serif !important;
 }
 
-.banner-scroll {
-background:linear-gradient(90deg,#06b6d4,#3b82f6,#9333ea);
-padding:8px;color:white;text-align:center;border-radius:8px;margin-bottom:10px;
+[data-testid="stSidebar"] {
+    background: #060f20 !important;
+    border-right: 1px solid #0f2240 !important;
 }
 
+[data-testid="stSidebar"] * {
+    font-family: 'Syne', sans-serif !important;
+}
+
+/* Sidebar nav buttons */
+.nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 12px 16px;
+    margin: 4px 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    color: #94a3b8;
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+}
+
+.nav-btn:hover {
+    background: #0f2240;
+    border-color: #1e3a5f;
+    color: #38bdf8;
+}
+
+.nav-btn.active {
+    background: linear-gradient(135deg, #0c2340, #0d3460);
+    border-color: #38bdf8;
+    color: #38bdf8;
+    box-shadow: 0 0 12px rgba(56,189,248,0.15);
+}
+
+/* Header */
+.main-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 0 10px 0;
+    border-bottom: 1px solid #0f2240;
+    margin-bottom: 24px;
+}
+
+.header-logo {
+    font-size: 32px;
+}
+
+.header-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 26px;
+    font-weight: 800;
+    background: linear-gradient(90deg, #38bdf8, #818cf8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.5px;
+    margin: 0;
+}
+
+.header-subtitle {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: #475569;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-top: 2px;
+}
+
+/* Status ticker */
+.ticker {
+    background: linear-gradient(90deg, #0c1f3a, #0a1628, #0c1f3a);
+    border: 1px solid #1e3a5f;
+    border-radius: 6px;
+    padding: 8px 16px;
+    margin-bottom: 24px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: #38bdf8;
+    letter-spacing: 1px;
+    overflow: hidden;
+}
+
+/* Cards / containers */
+.card {
+    background: #060f20;
+    border: 1px solid #0f2240;
+    border-radius: 12px;
+    padding: 28px;
+    margin-bottom: 20px;
+}
+
+/* Inputs */
+[data-testid="stTextInput"] input {
+    background: #060f20 !important;
+    border: 1px solid #1e3a5f !important;
+    border-radius: 8px !important;
+    color: #e2e8f0 !important;
+    font-family: 'Space Mono', monospace !important;
+    font-size: 13px !important;
+    padding: 10px 14px !important;
+}
+
+[data-testid="stTextInput"] input:focus {
+    border-color: #38bdf8 !important;
+    box-shadow: 0 0 0 2px rgba(56,189,248,0.15) !important;
+}
+
+[data-testid="stTextInput"] label {
+    color: #64748b !important;
+    font-family: 'Space Mono', monospace !important;
+    font-size: 11px !important;
+    letter-spacing: 1px !important;
+    text-transform: uppercase !important;
+}
+
+/* Buttons */
+[data-testid="stButton"] > button {
+    background: linear-gradient(135deg, #0369a1, #1d4ed8) !important;
+    border: none !important;
+    border-radius: 8px !important;
+    color: white !important;
+    font-family: 'Syne', sans-serif !important;
+    font-weight: 700 !important;
+    font-size: 13px !important;
+    letter-spacing: 1px !important;
+    padding: 10px 24px !important;
+    transition: all 0.2s !important;
+    box-shadow: 0 4px 12px rgba(3,105,161,0.3) !important;
+}
+
+[data-testid="stButton"] > button:hover {
+    background: linear-gradient(135deg, #0284c7, #2563eb) !important;
+    box-shadow: 0 4px 20px rgba(56,189,248,0.25) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* Metrics */
+[data-testid="stMetric"] {
+    background: #060f20;
+    border: 1px solid #0f2240;
+    border-radius: 10px;
+    padding: 16px 20px;
+}
+
+[data-testid="stMetricValue"] {
+    color: #38bdf8 !important;
+    font-family: 'Space Mono', monospace !important;
+    font-size: 28px !important;
+}
+
+[data-testid="stMetricLabel"] {
+    color: #64748b !important;
+    font-family: 'Syne', sans-serif !important;
+    text-transform: uppercase !important;
+    letter-spacing: 1px !important;
+    font-size: 11px !important;
+}
+
+/* Dataframe */
+[data-testid="stDataFrame"] {
+    border: 1px solid #0f2240 !important;
+    border-radius: 10px !important;
+    overflow: hidden !important;
+}
+
+/* Alert / info boxes */
+[data-testid="stAlert"] {
+    border-radius: 8px !important;
+    font-family: 'Space Mono', monospace !important;
+    font-size: 12px !important;
+}
+
+/* Sidebar section headers */
+.sidebar-section {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: #334155;
+    text-transform: uppercase;
+    padding: 16px 8px 8px 8px;
+    border-top: 1px solid #0f2240;
+    margin-top: 8px;
+}
+
+.sidebar-user-card {
+    background: #0c1f3a;
+    border: 1px solid #1e3a5f;
+    border-radius: 10px;
+    padding: 14px;
+    margin: 12px 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.user-dot {
+    width: 10px;
+    height: 10px;
+    background: #22c55e;
+    border-radius: 50%;
+    box-shadow: 0 0 6px #22c55e;
+    flex-shrink: 0;
+}
+
+.user-name {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: #38bdf8;
+    font-weight: 700;
+}
+
+.user-role {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* File uploader */
+[data-testid="stFileUploader"] {
+    border: 1px dashed #1e3a5f !important;
+    border-radius: 10px !important;
+    background: #060f20 !important;
+    padding: 12px !important;
+}
+
+/* Subheaders */
+h1, h2, h3 {
+    font-family: 'Syne', sans-serif !important;
+    color: #e2e8f0 !important;
+}
+
+/* Plotly chart backgrounds */
+.js-plotly-plot .plotly .bg {
+    fill: #060f20 !important;
+}
+
+/* Download button special style */
+[data-testid="stDownloadButton"] > button {
+    background: linear-gradient(135deg, #065f46, #047857) !important;
+    box-shadow: 0 4px 12px rgba(5,150,105,0.3) !important;
+}
+
+[data-testid="stDownloadButton"] > button:hover {
+    background: linear-gradient(135deg, #047857, #059669) !important;
+}
+
+/* Footer */
 .footer {
-position:fixed;bottom:0;width:100%;background:#020617;color:white;text-align:center;padding:10px;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: #020814;
+    border-top: 1px solid #0f2240;
+    color: #334155;
+    text-align: center;
+    padding: 10px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    z-index: 999;
+}
+
+/* Login form card */
+.login-card {
+    max-width: 420px;
+    margin: 40px auto;
+    background: #060f20;
+    border: 1px solid #1e3a5f;
+    border-radius: 16px;
+    padding: 40px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.login-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    color: #e2e8f0;
+    margin-bottom: 4px;
+}
+
+.login-subtitle {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: #475569;
+    letter-spacing: 1px;
+    margin-bottom: 28px;
+}
+
+.demo-badge {
+    background: #0c1f3a;
+    border: 1px solid #1e3a5f;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: #38bdf8;
+    margin-bottom: 20px;
+    display: inline-block;
+}
+
+/* Selectbox */
+[data-testid="stSelectbox"] > div {
+    background: #060f20 !important;
+    border-color: #1e3a5f !important;
+    border-radius: 8px !important;
+}
+
+[data-baseweb="select"] {
+    background: #060f20 !important;
 }
 </style>
+
+“””, unsafe_allow_html=True)
+
+# –––––––– HEADER ––––––––
+
+st.markdown(”””
+
+<div class="main-header">
+    <div class="header-logo">🛡️</div>
+    <div>
+        <div class="header-title">DB Corp Security Operations</div>
+        <div class="header-subtitle">AI-Powered Threat Intelligence Platform</div>
+    </div>
+</div>
 """, unsafe_allow_html=True)
 
-col1, col2 = st.columns([1,6])
-with col1:
-    st.image("https://cdn-icons-png.flaticon.com/512/3064/3064197.png", width=80)
-with col2:
-    st.markdown('<div class="cyber-header">DB Corp Cybersecurity Operations</div>', unsafe_allow_html=True)
+st.markdown(”””
 
-st.markdown('<div class="banner-scroll"><marquee>AI-Powered Anomaly Detection | Cyber Threat Monitoring | Security Intelligence Dashboard</marquee></div>', unsafe_allow_html=True)
+<div class="ticker">
+▶ &nbsp; AI-POWERED ANOMALY DETECTION &nbsp; · &nbsp; REAL-TIME THREAT MONITORING &nbsp; · &nbsp; INCIDENT RESPONSE ACTIVE &nbsp; · &nbsp; SECURITY INTELLIGENCE v2.0
+</div>
+""", unsafe_allow_html=True)
 
-# ---------------- MENU ----------------
-menu_options = ["Login","Register","Dashboard","Logs"]
+# –––––––– SIDEBAR NAVIGATION ––––––––
 
-menu = st.sidebar.selectbox(
-    "Menu",
-    menu_options,
-    index=menu_options.index(st.session_state.page)
-)
+with st.sidebar:
+st.markdown(’<div style="padding: 8px 0 16px 0;">’, unsafe_allow_html=True)
+st.markdown(’<div style="font-family: Space Mono, monospace; font-size:10px; letter-spacing:3px; color:#334155; text-transform:uppercase; padding-bottom:12px;">NAVIGATION</div>’, unsafe_allow_html=True)
 
-st.session_state.page = menu
+```
+# Show user info if logged in
+if st.session_state.logged_in:
+    st.markdown(f"""
+    <div class="sidebar-user-card">
+        <div class="user-dot"></div>
+        <div>
+            <div class="user-name">{st.session_state.username}</div>
+            <div class="user-role">{st.session_state.role} · Online</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-# ---------------- LOGIN ----------------
-if menu == "Login":
-    st.info("Demo → analyst / soc123")
+# Build menu options based on auth state
+if st.session_state.logged_in:
+    nav_options = ["Dashboard", "Logs"]
+else:
+    nav_options = ["Login", "Register"]
 
-    user = st.text_input("Username")
-    pwd = st.text_input("Password", type="password")
+# Ensure current page is valid for current state
+if st.session_state.page not in nav_options:
+    st.session_state.page = nav_options[0]
 
-    if st.session_state.login_attempts >= 5:
-        st.error("Too many failed attempts. Try later.")
-        st.stop()
+for option in nav_options:
+    icons = {
+        "Login": "🔐",
+        "Register": "📝",
+        "Dashboard": "📊",
+        "Logs": "📋"
+    }
+    is_active = st.session_state.page == option
+    active_class = "active" if is_active else ""
 
-    if st.button("Login"):
-        c.execute("SELECT * FROM users WHERE username=?", (user,))
-        result = c.fetchone()
+    if st.button(f"{icons.get(option, '•')}  {option}", key=f"nav_{option}", use_container_width=True):
+        st.session_state.page = option
+        st.rerun()
 
-        if result and verify_password(pwd, result[1]):
-            st.session_state.logged_in = True
-            st.session_state.username = user
-            st.session_state.role = result[2]
-            st.session_state.login_attempts = 0
-
-            log_event(user, "SUCCESS")
-
-            # ✅ Proper redirect
-            st.session_state.page = "Dashboard"
-            st.rerun()
-        else:
-            st.session_state.login_attempts += 1
-            log_event(user, "FAILED")
-            st.error("Invalid credentials")
-
-# ---------------- REGISTER ----------------
-elif menu == "Register":
-    user = st.text_input("Username")
-    pwd = st.text_input("Password", type="password")
-
-    if st.button("Register"):
-        if not strong_password(pwd):
-            st.error("Password must have 6+ chars, 1 uppercase, 1 number")
-        else:
-            try:
-                c.execute("INSERT INTO users VALUES (?,?,?)", (user, hash_password(pwd), "analyst"))
-                conn.commit()
-                st.success("Account created")
-            except:
-                st.error("Username exists")
-
-# ---------------- DASHBOARD ----------------
-elif menu == "Dashboard":
-
-    if not st.session_state.logged_in:
-        st.warning("Login first")
-        st.stop()
-
-    if st.button("Logout"):
+# Logout button at bottom if logged in
+if st.session_state.logged_in:
+    st.markdown('<div class="sidebar-section">SESSION</div>', unsafe_allow_html=True)
+    if st.button("⏻  Logout", key="nav_logout", use_container_width=True):
         st.session_state.logged_in = False
+        st.session_state.username = ""
+        st.session_state.role = ""
         st.session_state.page = "Login"
         st.rerun()
 
-    file = st.file_uploader("Upload Authentication Logs", type=["csv","xlsx"])
+st.markdown('</div>', unsafe_allow_html=True)
+```
 
-    if file:
-        df = pd.read_csv(file) if file.name.endswith(".csv") else pd.read_excel(file)
+# –––––––– LOGIN ––––––––
 
-        required = ["User ID","Country","Login Successful","Round-Trip Time [ms]","Is Attack IP"]
-        if not all(col in df.columns for col in required):
-            st.error("Dataset format invalid")
-            st.stop()
+if st.session_state.page == “Login”:
 
-        df["Login Successful"] = df["Login Successful"].astype(int)
-        df["Is Attack IP"] = df["Is Attack IP"].astype(int)
+```
+# Block login if already logged in
+if st.session_state.logged_in:
+    st.info(f"You are already logged in as **{st.session_state.username}**. Go to Dashboard or logout first.")
+    st.stop()
 
-        features = df[["Round-Trip Time [ms]","Login Successful","Is Attack IP"]]
+st.markdown('<div class="login-card">', unsafe_allow_html=True)
+st.markdown('<div class="login-title">Welcome Back</div>', unsafe_allow_html=True)
+st.markdown('<div class="login-subtitle">SIGN IN TO YOUR ACCOUNT</div>', unsafe_allow_html=True)
+st.markdown('<div class="demo-badge">🔑 Demo credentials → analyst / soc123</div>', unsafe_allow_html=True)
 
-        model = IsolationForest(contamination=0.1)
-        model.fit(features)
+user = st.text_input("Username", placeholder="Enter username")
+pwd = st.text_input("Password", type="password", placeholder="Enter password")
 
-        df["Anomaly_raw"] = model.predict(features)
-        df["Risk Score"] = (-model.decision_function(features)).round(3)
+if st.session_state.login_attempts >= 5:
+    st.error("🚫 Too many failed attempts. Please try later.")
+    st.stop()
 
-        def explain(row):
-            reasons = []
-            if row["Round-Trip Time [ms]"] > 500:
-                reasons.append("High latency")
-            if row["Login Successful"] == 0:
-                reasons.append("Failed login")
-            if row["Is Attack IP"] == 1:
-                reasons.append("Known attack IP")
-            if row["Risk Score"] > 0.5:
-                reasons.append("Model anomaly score high")
-            return ", ".join(reasons) if reasons else "Normal behavior"
+if st.button("Sign In →", use_container_width=True):
+    c.execute("SELECT * FROM users WHERE username=?", (user,))
+    result = c.fetchone()
 
-        df["Anomaly"] = df["Anomaly_raw"].apply(lambda x: "Suspicious" if x==-1 else "Normal")
-        df["Reason"] = df.apply(explain, axis=1)
-        df["Severity"] = df["Risk Score"].apply(lambda s: "High" if s>0.6 else "Medium" if s>0.3 else "Low")
+    if result and verify_password(pwd, result[1]):
+        st.session_state.logged_in = True
+        st.session_state.username = user
+        st.session_state.role = result[2]
+        st.session_state.login_attempts = 0
+        log_event(user, "SUCCESS")
+        st.session_state.page = "Dashboard"
+        st.rerun()
+    else:
+        st.session_state.login_attempts += 1
+        log_event(user, "FAILED")
+        remaining = 5 - st.session_state.login_attempts
+        st.error(f"❌ Invalid credentials. {remaining} attempts remaining.")
 
-        suspicious = df[df["Anomaly"]=="Suspicious"]
+st.markdown('</div>', unsafe_allow_html=True)
+```
 
+# –––––––– REGISTER ––––––––
+
+elif st.session_state.page == “Register”:
+
+```
+if st.session_state.logged_in:
+    st.info(f"You are already logged in as **{st.session_state.username}**.")
+    st.stop()
+
+st.markdown('<div class="login-card">', unsafe_allow_html=True)
+st.markdown('<div class="login-title">Create Account</div>', unsafe_allow_html=True)
+st.markdown('<div class="login-subtitle">REGISTER A NEW ANALYST ACCOUNT</div>', unsafe_allow_html=True)
+
+user = st.text_input("Username", placeholder="Choose a username")
+pwd = st.text_input("Password", type="password", placeholder="Min 6 chars, 1 uppercase, 1 number")
+
+if st.button("Create Account →", use_container_width=True):
+    if not strong_password(pwd):
+        st.error("⚠️ Password must have 6+ chars, 1 uppercase, 1 number")
+    else:
+        try:
+            c.execute("INSERT INTO users VALUES (?,?,?)", (user, hash_password(pwd), "analyst"))
+            conn.commit()
+            st.success("✅ Account created successfully. You can now login.")
+        except:
+            st.error("❌ Username already exists")
+
+st.markdown('</div>', unsafe_allow_html=True)
+```
+
+# –––––––– DASHBOARD ––––––––
+
+elif st.session_state.page == “Dashboard”:
+
+```
+if not st.session_state.logged_in:
+    st.warning("🔐 Please login to access the dashboard.")
+    st.stop()
+
+st.markdown("### 📊 Security Dashboard")
+
+file = st.file_uploader("Upload Authentication Logs (CSV or Excel)", type=["csv","xlsx"])
+
+if file:
+    df = pd.read_csv(file) if file.name.endswith(".csv") else pd.read_excel(file)
+
+    required = ["User ID","Country","Login Successful","Round-Trip Time [ms]","Is Attack IP"]
+    if not all(col in df.columns for col in required):
+        st.error("⚠️ Dataset format invalid. Required columns: " + ", ".join(required))
+        st.stop()
+
+    df["Login Successful"] = df["Login Successful"].astype(int)
+    df["Is Attack IP"] = df["Is Attack IP"].astype(int)
+
+    features = df[["Round-Trip Time [ms]","Login Successful","Is Attack IP"]]
+
+    model = IsolationForest(contamination=0.1)
+    model.fit(features)
+
+    df["Anomaly_raw"] = model.predict(features)
+    df["Risk Score"] = (-model.decision_function(features)).round(3)
+
+    def explain(row):
+        reasons = []
+        if row["Round-Trip Time [ms]"] > 500:
+            reasons.append("High latency")
+        if row["Login Successful"] == 0:
+            reasons.append("Failed login")
+        if row["Is Attack IP"] == 1:
+            reasons.append("Known attack IP")
+        if row["Risk Score"] > 0.5:
+            reasons.append("Model anomaly score high")
+        return ", ".join(reasons) if reasons else "Normal behavior"
+
+    df["Anomaly"] = df["Anomaly_raw"].apply(lambda x: "Suspicious" if x==-1 else "Normal")
+    df["Reason"] = df.apply(explain, axis=1)
+    df["Severity"] = df["Risk Score"].apply(lambda s: "High" if s>0.6 else "Medium" if s>0.3 else "Low")
+
+    suspicious = df[df["Anomaly"]=="Suspicious"]
+
+    # Metrics row
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Events", len(df))
+    with col2:
         st.metric("Suspicious Logins", len(suspicious))
+    with col3:
+        st.metric("Attack IPs Detected", int(df["Is Attack IP"].sum()))
 
-        st.subheader("🔍 Pinpointed Anomaly Detection")
-        st.dataframe(df[["User ID","Country","Anomaly","Risk Score","Severity","Reason"]])
+    st.markdown("---")
 
-        st.subheader("🚨 Suspicious Events")
-        st.dataframe(suspicious)
+    st.subheader("🔍 Anomaly Detection Results")
+    st.dataframe(df[["User ID","Country","Anomaly","Risk Score","Severity","Reason"]], use_container_width=True)
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.plotly_chart(px.pie(df, names="Login Successful"), use_container_width=True)
-        with col2:
-            st.plotly_chart(px.histogram(df, x="Round-Trip Time [ms]"), use_container_width=True)
+    st.subheader("🚨 Suspicious Events")
+    st.dataframe(suspicious, use_container_width=True)
 
-        df = df.reset_index(drop=True)
-        df["Time"] = pd.date_range(start="2024-01-01", periods=len(df), freq="min")
-        df["Suspicious"] = df["Anomaly"].apply(lambda x: 1 if x=="Suspicious" else 0)
+    col1, col2 = st.columns(2)
+    with col1:
+        fig1 = px.pie(df, names="Login Successful", title="Login Success Rate",
+                     color_discrete_sequence=["#38bdf8","#ef4444"])
+        fig1.update_layout(paper_bgcolor="#060f20", plot_bgcolor="#060f20", font_color="#94a3b8")
+        st.plotly_chart(fig1, use_container_width=True)
+    with col2:
+        fig2 = px.histogram(df, x="Round-Trip Time [ms]", title="Latency Distribution",
+                           color_discrete_sequence=["#818cf8"])
+        fig2.update_layout(paper_bgcolor="#060f20", plot_bgcolor="#060f20", font_color="#94a3b8")
+        st.plotly_chart(fig2, use_container_width=True)
 
-        st.plotly_chart(px.line(df, x="Time", y="Suspicious"), use_container_width=True)
+    df = df.reset_index(drop=True)
+    df["Time"] = pd.date_range(start="2024-01-01", periods=len(df), freq="min")
+    df["Suspicious"] = df["Anomaly"].apply(lambda x: 1 if x=="Suspicious" else 0)
 
-        csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button("Download Report", csv, "report.csv")
+    fig3 = px.line(df, x="Time", y="Suspicious", title="Suspicious Activity Over Time",
+                   color_discrete_sequence=["#f59e0b"])
+    fig3.update_layout(paper_bgcolor="#060f20", plot_bgcolor="#060f20", font_color="#94a3b8")
+    st.plotly_chart(fig3, use_container_width=True)
 
-# ---------------- LOGS ----------------
-elif menu == "Logs":
+    csv = df.to_csv(index=False).encode("utf-8")
+    st.download_button("⬇ Download Full Report", csv, "report.csv", mime="text/csv")
 
-    if not st.session_state.logged_in:
-        st.error("Login required")
-        st.stop()
+else:
+    st.markdown("""
+    <div style="text-align:center; padding: 60px 20px; background:#060f20; border:1px dashed #1e3a5f; border-radius:12px; color:#334155;">
+        <div style="font-size:48px; margin-bottom:12px;">📂</div>
+        <div style="font-family:'Syne',sans-serif; font-size:16px; color:#475569;">Upload a CSV or Excel file to begin analysis</div>
+        <div style="font-family:'Space Mono',monospace; font-size:11px; color:#334155; margin-top:8px;">Required: User ID, Country, Login Successful, Round-Trip Time [ms], Is Attack IP</div>
+    </div>
+    """, unsafe_allow_html=True)
+```
 
-    if st.session_state.role != "admin":
-        st.error("Access denied (Admin only)")
-        st.stop()
+# –––––––– LOGS ––––––––
 
-    logs = pd.read_sql("SELECT * FROM logs", conn)
-    st.dataframe(logs)
+elif st.session_state.page == “Logs”:
 
-# ---------------- FOOTER ----------------
-st.markdown("""
+```
+if not st.session_state.logged_in:
+    st.error("🔐 Login required")
+    st.stop()
+
+if st.session_state.role != "admin":
+    st.error("🚫 Access Denied — Admin privileges required")
+    st.stop()
+
+st.markdown("### 📋 System Access Logs")
+logs = pd.read_sql("SELECT * FROM logs", conn)
+st.dataframe(logs, use_container_width=True)
+```
+
+# –––––––– FOOTER ––––––––
+
+st.markdown(”””
+
 <div class="footer">
-Enterprise Cybersecurity Protection | Threat Monitoring | Incident Response
+DB CORP &nbsp;·&nbsp; ENTERPRISE CYBERSECURITY PLATFORM &nbsp;·&nbsp; THREAT MONITORING &nbsp;·&nbsp; INCIDENT RESPONSE &nbsp;·&nbsp; v2.0
 </div>
 """, unsafe_allow_html=True)
