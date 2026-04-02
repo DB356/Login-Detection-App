@@ -6,7 +6,7 @@ import sqlite3
 import bcrypt
 import time
 
-st.set_page_config(page_title="AI Cybersecurity System", layout="wide")
+st.set_page_config(page_title="DB Corp Security System", layout="wide")
 
 # ---------------- DATABASE ----------------
 conn = sqlite3.connect("users.db", check_same_thread=False)
@@ -41,18 +41,14 @@ def log_event(user, status):
     c.execute("INSERT INTO logs VALUES (?,?,?)", (user, time.ctime(), status))
     conn.commit()
 
-# ---------------- DEMO USERS ----------------
-demo_users = {
-    "admin": ("1234", "admin"),
-    "analyst": ("soc123", "analyst")
-}
-
-for u, (p, r) in demo_users.items():
-    try:
-        c.execute("INSERT INTO users VALUES (?,?,?)", (u, hash_password(p), r))
-        conn.commit()
-    except:
-        pass
+# ---------------- DEMO USERS (SAFE INSERT) ----------------
+c.execute("SELECT COUNT(*) FROM users")
+if c.fetchone()[0] == 0:
+    c.execute("INSERT INTO users VALUES (?,?,?)",
+              ("admin", hash_password("1234"), "admin"))
+    c.execute("INSERT INTO users VALUES (?,?,?)",
+              ("analyst", hash_password("soc123"), "analyst"))
+    conn.commit()
 
 # ---------------- SESSION ----------------
 if "logged_in" not in st.session_state:
@@ -69,7 +65,7 @@ SESSION_TIMEOUT = 600
 if st.session_state.logged_in:
     if time.time() - st.session_state.last_activity > SESSION_TIMEOUT:
         st.session_state.logged_in = False
-        st.warning("Session expired. Please login again.")
+        st.warning("Session expired")
         st.stop()
 
 st.session_state.last_activity = time.time()
@@ -77,11 +73,6 @@ st.session_state.last_activity = time.time()
 # ---------------- UI ----------------
 st.markdown("""
 <style>
-.banner {
-background:linear-gradient(90deg,#06b6d4,#3b82f6,#9333ea);
-padding:10px;color:white;text-align:center;font-weight:bold;
-}
-
 .banner-scroll {
 background:linear-gradient(90deg,#06b6d4,#3b82f6,#9333ea);
 padding:8px;color:white;font-weight:bold;text-align:center;
@@ -100,10 +91,16 @@ border-top:1px solid #1e293b;
 </style>
 """, unsafe_allow_html=True)
 
-# -------- Banner --------
-st.markdown('<div class="banner">🚨 AI Cybersecurity Monitoring System</div>', unsafe_allow_html=True)
+# -------- LOGO HEADER --------
+col1, col2 = st.columns([1,6])
 
-# -------- Scrolling Line --------
+with col1:
+    st.image("https://cdn-icons-png.flaticon.com/512/3064/3064197.png", width=80)
+
+with col2:
+    st.markdown("### DB Corp Cybersecurity Operations Dashboard")
+
+# -------- SCROLLING LINE --------
 st.markdown(
     '<div class="banner-scroll"><marquee>AI-Powered Anomaly Detection | Cyber Threat Monitoring | Security Intelligence Dashboard</marquee></div>',
     unsafe_allow_html=True
@@ -127,14 +124,10 @@ if menu == "Login":
     pwd = st.text_input("Password", type="password")
 
     if st.session_state.login_attempts >= 5:
-        st.error("Too many failed attempts. Try later.")
+        st.error("Too many attempts")
         st.stop()
 
     if st.button("Login"):
-
-        if not user or not pwd:
-            st.error("All fields required")
-            st.stop()
 
         c.execute("SELECT * FROM users WHERE username=?", (user,))
         result = c.fetchone()
@@ -143,12 +136,11 @@ if menu == "Login":
             st.session_state.logged_in = True
             st.session_state.username = user
             st.session_state.role = result[2]
-            st.session_state.login_attempts = 0
             st.session_state.menu = "Dashboard"
 
             log_event(user, "SUCCESS")
 
-            st.success(f"Welcome {user}")
+            st.success("Login successful")
             st.rerun()
         else:
             st.session_state.login_attempts += 1
@@ -160,19 +152,14 @@ elif menu == "Register":
 
     user = st.text_input("Username")
     pwd = st.text_input("Password", type="password")
-    role = st.selectbox("Role", ["analyst","admin"])
 
     if st.button("Register"):
 
-        if not user or not pwd:
-            st.error("All fields required")
-            st.stop()
-
         try:
             c.execute("INSERT INTO users VALUES (?,?,?)",
-                      (user, hash_password(pwd), role))
+                      (user, hash_password(pwd), "analyst"))
             conn.commit()
-            st.success("Account created")
+            st.success("Account created (Analyst role)")
         except:
             st.error("Username already exists")
 
@@ -186,35 +173,20 @@ elif menu == "Dashboard":
     if st.button("Logout"):
         st.session_state.logged_in = False
         st.session_state.menu = "Login"
-        st.success("Logged out")
         st.stop()
-
-    st.subheader(f"User: {st.session_state.username} ({st.session_state.role})")
 
     file = st.file_uploader("Upload dataset", type=["csv","xlsx"])
 
-    # -------- Dataset Requirements --------
     st.markdown("""
     <div style='background:#111827;padding:15px;border-left:5px solid #22c55e;
-    border-radius:10px;margin-top:10px;box-shadow:0 0 10px rgba(34,197,94,0.4);'>
-    <b style='color:#22c55e;font-size:18px;'>⚠ Dataset Requirements</b><br><br>
-    • User ID<br>
-    • Country<br>
-    • Login Successful<br>
-    • Round-Trip Time [ms]<br>
-    • Is Attack IP<br>
+    border-radius:10px;margin-top:10px;'>
+    <b style='color:#22c55e;'>Dataset Requirements</b><br>
+    User ID, Country, Login Successful, RTT, Is Attack IP
     </div>
     """, unsafe_allow_html=True)
 
     if file:
-
         df = pd.read_csv(file) if file.name.endswith(".csv") else pd.read_excel(file)
-
-        required = ["User ID","Country","Login Successful","Round-Trip Time [ms]","Is Attack IP"]
-
-        if not all(col in df.columns for col in required):
-            st.error("Dataset format invalid")
-            st.stop()
 
         df["Login Successful"] = df["Login Successful"].astype(int)
         df["Is Attack IP"] = df["Is Attack IP"].astype(int)
@@ -224,57 +196,24 @@ elif menu == "Dashboard":
         model = IsolationForest(contamination=0.1)
         model.fit(features)
 
-        df["Anomaly_raw"] = model.predict(features)
+        df["Anomaly"] = model.predict(features)
+        df["Anomaly"] = df["Anomaly"].apply(lambda x: "Suspicious" if x==-1 else "Normal")
+
         df["Risk Score"] = (-model.decision_function(features)).round(3)
-        df["Anomaly"] = df["Anomaly_raw"].apply(lambda x: "Suspicious" if x==-1 else "Normal")
-
-        # -------- Explanation --------
-        def explain(row):
-            reasons = []
-            if row["Round-Trip Time [ms]"] > 500:
-                reasons.append("High latency")
-            if row["Login Successful"] == 0:
-                reasons.append("Failed login")
-            if row["Is Attack IP"] == 1:
-                reasons.append("Attack IP")
-            return ", ".join(reasons) if reasons else "Normal"
-
-        df["Explanation"] = df.apply(explain, axis=1)
 
         suspicious = df[df["Anomaly"]=="Suspicious"]
 
-        if len(suspicious)>0:
-            st.error(f"🚨 {len(suspicious)} suspicious logins detected")
-        else:
-            st.success("System normal")
+        st.metric("Suspicious Logins", len(suspicious))
 
-        # -------- Charts --------
         col1, col2 = st.columns(2)
 
         with col1:
-            pie = df["Login Successful"].value_counts().reset_index()
-            pie.columns = ["Status","Count"]
-            fig = px.pie(pie, values="Count", names="Status")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(px.pie(df, names="Login Successful"))
 
         with col2:
-            fig2 = px.histogram(df, x="Round-Trip Time [ms]")
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(px.histogram(df, x="Round-Trip Time [ms]"))
 
-        # -------- Profiling --------
-        st.subheader("User Behavior Profiling")
-        profile = df.groupby("User ID").agg({
-            "Round-Trip Time [ms]":"mean",
-            "Login Successful":"sum",
-            "Is Attack IP":"sum"
-        }).reset_index()
-        st.dataframe(profile)
-
-        # -------- Results --------
-        st.subheader("Detection Results")
-        st.dataframe(df[["User ID","Country","Anomaly","Risk Score","Explanation"]])
-
-        st.subheader("Suspicious Events")
+        st.dataframe(df)
         st.dataframe(suspicious)
 
 # ---------------- LOGS ----------------
@@ -290,7 +229,7 @@ elif menu == "Logs":
 # ---------------- FOOTER ----------------
 st.markdown("""
 <div class="footer">
-<b>Enterprise Cybersecurity Protection</b> | Threat monitoring - Security analytics - Incident response |
+Enterprise Cybersecurity Protection | Threat Monitoring | Incident Response |
 Phone: +1-800-555-0148 | Email: enterprise-security@protectionlabs.io
 </div>
 """, unsafe_allow_html=True)
