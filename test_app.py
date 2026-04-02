@@ -5,6 +5,7 @@ from sklearn.ensemble import IsolationForest
 import sqlite3
 import bcrypt
 import time
+import re
 
 st.set_page_config(page_title="DB Corp Security System", layout="wide")
 
@@ -27,10 +28,12 @@ def log_event(user, status):
     c.execute("INSERT INTO logs VALUES (?,?,?)", (user, time.ctime(), status))
     conn.commit()
 
-# ---------------- DEMO USERS (NO ADMIN) ----------------
+def strong_password(p):
+    return len(p) >= 6 and re.search("[A-Z]", p) and re.search("[0-9]", p)
+
+# ---------------- DEMO USER ----------------
 c.execute("SELECT COUNT(*) FROM users")
 if c.fetchone()[0] == 0:
-    # Only analyst demo user
     c.execute("INSERT INTO users VALUES (?,?,?)", ("analyst", hash_password("soc123"), "analyst"))
     conn.commit()
 
@@ -39,9 +42,19 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.username = ""
     st.session_state.role = ""
+    st.session_state.login_attempts = 0
+    st.session_state.last_activity = time.time()
 
-if "menu" not in st.session_state:
-    st.session_state.menu = "Login"
+# ---------------- SESSION TIMEOUT ----------------
+SESSION_TIMEOUT = 600  # 10 min
+
+if st.session_state.logged_in:
+    if time.time() - st.session_state.last_activity > SESSION_TIMEOUT:
+        st.session_state.logged_in = False
+        st.warning("Session expired. Please login again.")
+        st.stop()
+
+st.session_state.last_activity = time.time()
 
 # ---------------- UI ----------------
 st.markdown("""
@@ -73,9 +86,8 @@ with col2:
 
 st.markdown('<div class="banner-scroll"><marquee>AI-Powered Anomaly Detection | Cyber Threat Monitoring | Security Intelligence Dashboard</marquee></div>', unsafe_allow_html=True)
 
-menu_options = ["Login","Register","Dashboard","Logs"]
-menu = st.sidebar.selectbox("Menu", menu_options, index=menu_options.index(st.session_state.menu))
-st.session_state.menu = menu
+# ---------------- MENU ----------------
+menu = st.sidebar.selectbox("Menu", ["Login","Register","Dashboard","Logs"])
 
 # ---------------- LOGIN ----------------
 if menu == "Login":
@@ -84,22 +96,30 @@ if menu == "Login":
     user = st.text_input("Username")
     pwd = st.text_input("Password", type="password")
 
+    if st.session_state.login_attempts >= 5:
+        st.error("Too many failed attempts. Try later.")
+        st.stop()
+
     if st.button("Login"):
-        c.execute("SELECT * FROM users WHERE username=?", (user,))
-        result = c.fetchone()
+        try:
+            c.execute("SELECT * FROM users WHERE username=?", (user,))
+            result = c.fetchone()
 
-        if result and verify_password(pwd, result[1]):
-            st.session_state.logged_in = True
-            st.session_state.username = user
-            st.session_state.role = result[2]
+            if result and verify_password(pwd, result[1]):
+                st.session_state.logged_in = True
+                st.session_state.username = user
+                st.session_state.role = result[2]
+                st.session_state.login_attempts = 0
 
-            log_event(user, "SUCCESS")
+                log_event(user, "SUCCESS")
 
-            st.session_state.menu = "Dashboard"
-            st.rerun()
-        else:
-            log_event(user, "FAILED")
-            st.error("Invalid credentials")
+                st.success("Login successful. Go to Dashboard.")
+            else:
+                st.session_state.login_attempts += 1
+                log_event(user, "FAILED")
+                st.error("Invalid credentials")
+        except:
+            st.error("Login error")
 
 # ---------------- REGISTER ----------------
 elif menu == "Register":
@@ -107,12 +127,15 @@ elif menu == "Register":
     pwd = st.text_input("Password", type="password")
 
     if st.button("Register"):
-        try:
-            c.execute("INSERT INTO users VALUES (?,?,?)", (user, hash_password(pwd), "analyst"))
-            conn.commit()
-            st.success("Account created")
-        except:
-            st.error("Username exists")
+        if not strong_password(pwd):
+            st.error("Password must have 6+ chars, 1 uppercase, 1 number")
+        else:
+            try:
+                c.execute("INSERT INTO users VALUES (?,?,?)", (user, hash_password(pwd), "analyst"))
+                conn.commit()
+                st.success("Account created")
+            except:
+                st.error("Username exists")
 
 # ---------------- DASHBOARD ----------------
 elif menu == "Dashboard":
@@ -120,6 +143,10 @@ elif menu == "Dashboard":
     if not st.session_state.logged_in:
         st.warning("Login first")
         st.stop()
+
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.rerun()
 
     file = st.file_uploader("Upload Authentication Logs", type=["csv","xlsx"])
 
@@ -156,10 +183,7 @@ elif menu == "Dashboard":
 
         df["Anomaly"] = df["Anomaly_raw"].apply(lambda x: "Suspicious" if x==-1 else "Normal")
         df["Reason"] = df.apply(explain, axis=1)
-
-        df["Severity"] = df["Risk Score"].apply(
-            lambda s: "High" if s>0.6 else "Medium" if s>0.3 else "Low"
-        )
+        df["Severity"] = df["Risk Score"].apply(lambda s: "High" if s>0.6 else "Medium" if s>0.3 else "Low")
 
         suspicious = df[df["Anomaly"]=="Suspicious"]
 
@@ -186,7 +210,7 @@ elif menu == "Dashboard":
         csv = df.to_csv(index=False).encode("utf-8")
         st.download_button("Download Report", csv, "report.csv")
 
-# ---------------- LOGS (ADMIN ONLY) ----------------
+# ---------------- LOGS ----------------
 elif menu == "Logs":
 
     if not st.session_state.logged_in:
