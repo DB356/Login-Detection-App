@@ -9,7 +9,7 @@ import re
 
 st.set_page_config(page_title="DB Corp Security System", layout="wide")
 
-# -------- DATABASE --------
+# ---------------- DATABASE ----------------
 conn = sqlite3.connect("users.db", check_same_thread=False)
 c = conn.cursor()
 
@@ -21,7 +21,7 @@ conn.commit()
 c.execute("DELETE FROM users WHERE username='admin'")
 conn.commit()
 
-# -------- SECURITY --------
+# ---------------- SECURITY ----------------
 def hash_password(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
 
@@ -35,13 +35,13 @@ def log_event(user, status):
 def strong_password(p):
     return len(p) >= 6 and re.search("[A-Z]", p) and re.search("[0-9]", p)
 
-# -------- DEMO USER --------
+# ---------------- DEMO USER ----------------
 c.execute("SELECT COUNT(*) FROM users")
 if c.fetchone()[0] == 0:
     c.execute("INSERT INTO users VALUES (?,?,?)", ("analyst", hash_password("soc123"), "analyst"))
     conn.commit()
 
-# -------- SESSION --------
+# ---------------- SESSION ----------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.username = ""
@@ -52,7 +52,7 @@ if "logged_in" not in st.session_state:
 if "page" not in st.session_state:
     st.session_state.page = "Login"
 
-# -------- SESSION TIMEOUT --------
+# ---------------- SESSION TIMEOUT ----------------
 if st.session_state.logged_in:
     if time.time() - st.session_state.last_activity > 600:
         st.session_state.logged_in = False
@@ -62,49 +62,48 @@ if st.session_state.logged_in:
 
 st.session_state.last_activity = time.time()
 
-# -------- UI STYLE (modern touch only) --------
+# ---------------- UI ----------------
 st.markdown("""
 <style>
-body {background:#030712;}
-[data-testid="stSidebar"] {background:#020617;}
-[data-testid="stSidebar"] * {cursor:pointer !important;}
+[data-testid="stSidebar"] * { cursor: pointer !important; }
+
+.cyber-header {
+font-size:28px;
+color:#22c55e;
+text-shadow:0 0 10px #22c55e;
+}
+
+.banner-scroll {
+background:linear-gradient(90deg,#06b6d4,#3b82f6,#9333ea);
+padding:8px;color:white;text-align:center;border-radius:8px;margin-bottom:10px;
+}
+
+.footer {
+position:fixed;bottom:0;width:100%;background:#020617;color:white;text-align:center;padding:10px;
+}
 
 .block-container {padding-top:1rem;}
-
-.card {
-    background:#020617;
-    border:1px solid #1e293b;
-    padding:16px;
-    border-radius:12px;
-}
-
-.title {
-    font-size:26px;
-    font-weight:700;
-    color:#38bdf8;
-}
-
-.sub {
-    color:#64748b;
-    font-size:12px;
-}
 </style>
 """, unsafe_allow_html=True)
 
-# -------- HEADER --------
-st.markdown('<div class="title">DB Corp Cybersecurity Operations</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub">AI-Powered Threat Intelligence Platform</div>', unsafe_allow_html=True)
+col1, col2 = st.columns([1,6])
+with col1:
+    st.image("https://cdn-icons-png.flaticon.com/512/3064/3064197.png", width=80)
+with col2:
+    st.markdown('<div class="cyber-header">DB Corp Cybersecurity Operations</div>', unsafe_allow_html=True)
 
-# -------- MENU (FIXED CLICK ISSUE) --------
+st.markdown('<div class="banner-scroll"><marquee>AI-Powered Anomaly Detection | Cyber Threat Monitoring | Security Intelligence Dashboard</marquee></div>', unsafe_allow_html=True)
+
+# ---------------- MENU (FIXED) ----------------
 with st.sidebar:
 
     if st.session_state.logged_in:
         st.success(f"Logged in: {st.session_state.username}")
 
         menu = st.radio(
-            "Navigation",
-            ["Dashboard", "Logs"],
-            index=["Dashboard", "Logs"].index(st.session_state.page)
+            "Menu",
+            ["Dashboard","Logs"],
+            index=["Dashboard","Logs"].index(st.session_state.page)
         )
 
         if st.button("Logout"):
@@ -114,18 +113,18 @@ with st.sidebar:
 
     else:
         menu = st.radio(
-            "Navigation",
-            ["Login", "Register"],
-            index=["Login", "Register"].index(st.session_state.page)
+            "Menu",
+            ["Login","Register"],
+            index=["Login","Register"].index(st.session_state.page)
         )
 
 st.session_state.page = menu
 
-# -------- LOGIN --------
+# ---------------- LOGIN ----------------
 if menu == "Login":
 
     if st.session_state.logged_in:
-        st.warning("Already logged in")
+        st.warning("Already logged in. Logout first.")
         st.stop()
 
     st.info("Demo → analyst / soc123")
@@ -134,7 +133,7 @@ if menu == "Login":
     pwd = st.text_input("Password", type="password")
 
     if st.session_state.login_attempts >= 5:
-        st.error("Too many failed attempts")
+        st.error("Too many failed attempts. Try later.")
         st.stop()
 
     if st.button("Login"):
@@ -156,11 +155,11 @@ if menu == "Login":
             log_event(user, "FAILED")
             st.error("Invalid credentials")
 
-# -------- REGISTER --------
+# ---------------- REGISTER ----------------
 elif menu == "Register":
 
     if st.session_state.logged_in:
-        st.warning("Logout first to create new account")
+        st.warning("Logout first to create new account.")
         st.stop()
 
     user = st.text_input("Username")
@@ -177,7 +176,7 @@ elif menu == "Register":
             except:
                 st.error("Username exists")
 
-# -------- DASHBOARD --------
+# ---------------- DASHBOARD ----------------
 elif menu == "Dashboard":
 
     if not st.session_state.logged_in:
@@ -225,7 +224,11 @@ elif menu == "Dashboard":
 
         st.metric("Suspicious Logins", len(suspicious))
 
-        st.dataframe(df)
+        st.subheader("🔍 Pinpointed Anomaly Detection")
+        st.dataframe(df[["User ID","Country","Anomaly","Risk Score","Severity","Reason"]])
+
+        st.subheader("🚨 Suspicious Events")
+        st.dataframe(suspicious)
 
         col1, col2 = st.columns(2)
         with col1:
@@ -233,7 +236,16 @@ elif menu == "Dashboard":
         with col2:
             st.plotly_chart(px.histogram(df, x="Round-Trip Time [ms]"), use_container_width=True)
 
-# -------- LOGS --------
+        df = df.reset_index(drop=True)
+        df["Time"] = pd.date_range(start="2024-01-01", periods=len(df), freq="min")
+        df["Suspicious"] = df["Anomaly"].apply(lambda x: 1 if x=="Suspicious" else 0)
+
+        st.plotly_chart(px.line(df, x="Time", y="Suspicious"), use_container_width=True)
+
+        csv = df.to_csv(index=False).encode("utf-8")
+        st.download_button("Download Report", csv, "report.csv")
+
+# ---------------- LOGS ----------------
 elif menu == "Logs":
 
     if not st.session_state.logged_in:
@@ -246,3 +258,10 @@ elif menu == "Logs":
 
     logs = pd.read_sql("SELECT * FROM logs", conn)
     st.dataframe(logs)
+
+# ---------------- FOOTER ----------------
+st.markdown("""
+<div class="footer">
+Enterprise Cybersecurity Protection | Threat Monitoring | Incident Response
+</div>
+""", unsafe_allow_html=True)
