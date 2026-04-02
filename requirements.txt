@@ -1,6 +1,6 @@
 streamlit
-pyngrok
 pandas
 plotly
 openpyxl
 scikit-learn
+bcrypt
