@@ -27,10 +27,10 @@ def log_event(user, status):
     c.execute("INSERT INTO logs VALUES (?,?,?)", (user, time.ctime(), status))
     conn.commit()
 
-# ---------------- DEMO USERS ----------------
+# ---------------- DEMO USERS (NO ADMIN) ----------------
 c.execute("SELECT COUNT(*) FROM users")
 if c.fetchone()[0] == 0:
-    c.execute("INSERT INTO users VALUES (?,?,?)", ("admin", hash_password("1234"), "admin"))
+    # Only analyst demo user
     c.execute("INSERT INTO users VALUES (?,?,?)", ("analyst", hash_password("soc123"), "analyst"))
     conn.commit()
 
@@ -79,7 +79,7 @@ st.session_state.menu = menu
 
 # ---------------- LOGIN ----------------
 if menu == "Login":
-    st.info("Demo → admin / 1234 | analyst / soc123")
+    st.info("Demo → analyst / soc123")
 
     user = st.text_input("Username")
     pwd = st.text_input("Password", type="password")
@@ -142,7 +142,6 @@ elif menu == "Dashboard":
         df["Anomaly_raw"] = model.predict(features)
         df["Risk Score"] = (-model.decision_function(features)).round(3)
 
-        # -------- CLEAN PINPOINT EXPLANATION --------
         def explain(row):
             reasons = []
             if row["Round-Trip Time [ms]"] > 500:
@@ -178,18 +177,16 @@ elif menu == "Dashboard":
         with col2:
             st.plotly_chart(px.histogram(df, x="Round-Trip Time [ms]"), use_container_width=True)
 
-        # -------- TIMELINE --------
         df = df.reset_index(drop=True)
         df["Time"] = pd.date_range(start="2024-01-01", periods=len(df), freq="min")
         df["Suspicious"] = df["Anomaly"].apply(lambda x: 1 if x=="Suspicious" else 0)
 
         st.plotly_chart(px.line(df, x="Time", y="Suspicious"), use_container_width=True)
 
-        # -------- DOWNLOAD --------
         csv = df.to_csv(index=False).encode("utf-8")
         st.download_button("Download Report", csv, "report.csv")
 
-# ---------------- LOGS (PROTECTED) ----------------
+# ---------------- LOGS (ADMIN ONLY) ----------------
 elif menu == "Logs":
 
     if not st.session_state.logged_in:
