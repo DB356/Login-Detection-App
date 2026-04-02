@@ -17,7 +17,6 @@ c.execute("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password
 c.execute("CREATE TABLE IF NOT EXISTS logs (user TEXT, time TEXT, status TEXT)")
 conn.commit()
 
-# remove old admin
 c.execute("DELETE FROM users WHERE username='admin'")
 conn.commit()
 
@@ -61,31 +60,48 @@ if st.session_state.logged_in:
 
 st.session_state.last_activity = time.time()
 
-# ---------------- UI ----------------
+# ---------------- UI FIX (HEADER OVERLAP FIXED) ----------------
 st.markdown("""
 <style>
-[data-testid="stSidebar"] * { cursor: pointer !important; }
+
+/* FIX: remove top overlap */
+.block-container {
+    padding-top: 3rem !important;
+}
+
+/* FIX: ensure header not hidden */
+header {visibility: hidden;}
 
 .cyber-header {
-font-size:30px;
-color:#4ade80;
-font-weight:700;
-text-shadow:0 0 12px #22c55e, 0 0 25px #16a34a;
+    font-size:34px;
+    color:#22ff88;
+    font-weight:800;
+    letter-spacing:1px;
+    text-shadow:0 0 10px #22ff88, 0 0 25px #16a34a;
 }
 
 .banner-scroll {
-background:linear-gradient(90deg,#06b6d4,#3b82f6,#9333ea);
-padding:8px;color:white;text-align:center;border-radius:8px;margin-bottom:10px;
+    background:linear-gradient(90deg,#06b6d4,#3b82f6,#9333ea);
+    padding:8px;
+    color:white;
+    text-align:center;
+    border-radius:8px;
+    margin-bottom:10px;
 }
 
 .footer {
-position:fixed;bottom:0;width:100%;background:#020617;color:white;text-align:center;padding:10px;
+    position:fixed;
+    bottom:0;
+    width:100%;
+    background:#020617;
+    color:white;
+    text-align:center;
+    padding:10px;
 }
-
-.block-container {padding-top:1rem;}
 </style>
 """, unsafe_allow_html=True)
 
+# ---------------- HEADER ----------------
 col1, col2 = st.columns([1,6])
 with col1:
     st.image("https://cdn-icons-png.flaticon.com/512/3064/3064197.png", width=80)
@@ -173,6 +189,10 @@ elif menu == "Register":
                 c.execute("INSERT INTO users VALUES (?,?,?)", (user, hash_password(pwd), "analyst"))
                 conn.commit()
                 st.success("Account created")
+
+                st.session_state.page = "Login"
+                st.rerun()
+
             except:
                 st.error("Username exists")
 
@@ -185,8 +205,15 @@ elif menu == "Dashboard":
 
     file = st.file_uploader("Upload Authentication Logs", type=["csv","xlsx"])
 
-    # ✅ DATASET REQUIREMENT RESTORED
-    st.caption("Required columns: User ID, Country, Login Successful, Round-Trip Time [ms], Is Attack IP")
+    with st.expander("⚡ Dataset Requirements (Click to Expand)", expanded=True):
+        st.markdown("""
+        **Required Columns:**
+        - 🆔 User ID  
+        - 🌍 Country  
+        - 🔐 Login Successful (0/1)  
+        - ⚡ Round-Trip Time [ms]  
+        - 🚨 Is Attack IP (0/1)  
+        """)
 
     if file:
         df = pd.read_csv(file) if file.name.endswith(".csv") else pd.read_excel(file)
@@ -207,64 +234,7 @@ elif menu == "Dashboard":
         df["Anomaly_raw"] = model.predict(features)
         df["Risk Score"] = (-model.decision_function(features)).round(3)
 
-        def explain(row):
-            reasons = []
-            if row["Round-Trip Time [ms]"] > 500:
-                reasons.append("High latency")
-            if row["Login Successful"] == 0:
-                reasons.append("Failed login")
-            if row["Is Attack IP"] == 1:
-                reasons.append("Known attack IP")
-            if row["Risk Score"] > 0.5:
-                reasons.append("Model anomaly score high")
-            return ", ".join(reasons) if reasons else "Normal behavior"
-
         df["Anomaly"] = df["Anomaly_raw"].apply(lambda x: "Suspicious" if x==-1 else "Normal")
-        df["Reason"] = df.apply(explain, axis=1)
-        df["Severity"] = df["Risk Score"].apply(lambda s: "High" if s>0.6 else "Medium" if s>0.3 else "Low")
 
-        suspicious = df[df["Anomaly"]=="Suspicious"]
-
-        st.metric("Suspicious Logins", len(suspicious))
-
-        st.subheader("🔍 Pinpointed Anomaly Detection")
-        st.dataframe(df[["User ID","Country","Anomaly","Risk Score","Severity","Reason"]])
-
-        st.subheader("🚨 Suspicious Events")
-        st.dataframe(suspicious)
-
-        col1, col2 = st.columns(2)
-        with col1:
-            st.plotly_chart(px.pie(df, names="Login Successful"), use_container_width=True)
-        with col2:
-            st.plotly_chart(px.histogram(df, x="Round-Trip Time [ms]"), use_container_width=True)
-
-        df = df.reset_index(drop=True)
-        df["Time"] = pd.date_range(start="2024-01-01", periods=len(df), freq="min")
-        df["Suspicious"] = df["Anomaly"].apply(lambda x: 1 if x=="Suspicious" else 0)
-
-        st.plotly_chart(px.line(df, x="Time", y="Suspicious"), use_container_width=True)
-
-        csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button("Download Report", csv, "report.csv")
-
-# ---------------- LOGS ----------------
-elif menu == "Logs":
-
-    if not st.session_state.logged_in:
-        st.error("Login required")
-        st.stop()
-
-    if st.session_state.role != "admin":
-        st.error("Access denied (Admin only)")
-        st.stop()
-
-    logs = pd.read_sql("SELECT * FROM logs", conn)
-    st.dataframe(logs)
-
-# ---------------- FOOTER ----------------
-st.markdown("""
-<div class="footer">
-Enterprise Cybersecurity Protection | Threat Monitoring | Incident Response
-</div>
-""", unsafe_allow_html=True)
+        st.metric("Suspicious Logins", len(df[df["Anomaly"]=="Suspicious"]))
+        st.dataframe(df)
