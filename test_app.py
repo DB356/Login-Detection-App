@@ -1,199 +1,223 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 from sklearn.ensemble import IsolationForest
+import sqlite3
+import bcrypt
+import time
 
-st.set_page_config(page_title="DB Corp Cybersecurity Dashboard", layout="wide")
+st.set_page_config(page_title="AI Cybersecurity System", layout="wide")
 
-# ---------------- UI Styling ----------------
-st.markdown("""
-<style>
-body {background-color:#020617;}
+# ---------------- DATABASE ----------------
+conn = sqlite3.connect("users.db", check_same_thread=False)
+c = conn.cursor()
 
-.banner {
-background:linear-gradient(90deg,#06b6d4,#3b82f6,#9333ea);
-padding:10px;color:white;font-weight:bold;text-align:center;
-font-size:18px;border-radius:8px;margin-bottom:10px}
-
-.footer {
-position:fixed;bottom:0;left:0;width:100%;
-background:#020617;color:white;padding:10px;
-border-top:1px solid #1e293b;text-align:center;font-size:14px}
-
-.dataset-box {
-background:#111827;
-border-left:5px solid #22c55e;
-padding:15px;
-border-radius:10px;
-margin-top:10px;
-margin-bottom:15px;
-box-shadow:0px 0px 10px rgba(34,197,94,0.5);
-}
-
-.dataset-title {
-color:#22c55e;
-font-size:18px;
-font-weight:bold;
-margin-bottom:8px;
-}
-</style>
-""", unsafe_allow_html=True)
-
-st.markdown(
-    '<div class="banner"><marquee>AI-Powered Cyber Threat Monitoring | Login Anomaly Detection</marquee></div>',
-    unsafe_allow_html=True
+c.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    username TEXT PRIMARY KEY,
+    password BLOB,
+    role TEXT
 )
+""")
 
-# ---------------- Header ----------------
-col1, col2 = st.columns([1,6])
+c.execute("""
+CREATE TABLE IF NOT EXISTS logs (
+    user TEXT,
+    time TEXT,
+    status TEXT
+)
+""")
 
-with col1:
-    st.image("https://cdn-icons-png.flaticon.com/512/2092/2092663.png", width=100)
+conn.commit()
 
-with col2:
-    st.title("DB Corp. Ltd. AI Cybersecurity Dashboard")
+# ---------------- SECURITY ----------------
+def hash_password(password):
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
 
-# ---------------- Sidebar ----------------
-with st.sidebar:
-    st.header("Menu")
-    page = st.radio("Navigation", ["Dashboard", "Login"])
+def verify_password(password, hashed):
+    return bcrypt.checkpw(password.encode(), hashed)
 
-# ---------------- Login ----------------
-users = {"admin":"1234","analyst":"soc123"}
+def log_event(user, status):
+    c.execute("INSERT INTO logs VALUES (?,?,?)", (user, time.ctime(), status))
+    conn.commit()
 
+# ---------------- DEMO USERS ----------------
+demo_users = {
+    "admin": ("1234", "admin"),
+    "analyst": ("soc123", "analyst")
+}
+
+for u, (p, r) in demo_users.items():
+    try:
+        c.execute("INSERT INTO users VALUES (?,?,?)", (u, hash_password(p), r))
+        conn.commit()
+    except:
+        pass
+
+# ---------------- SESSION ----------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
+    st.session_state.username = ""
+    st.session_state.role = ""
+    st.session_state.login_attempts = 0
+    st.session_state.last_activity = time.time()
 
-if page == "Login":
-    st.subheader("Login")
-    u = st.text_input("Username")
-    p = st.text_input("Password", type="password")
+# ---------------- SESSION TIMEOUT ----------------
+SESSION_TIMEOUT = 600  # 10 minutes
+
+if st.session_state.logged_in:
+    if time.time() - st.session_state.last_activity > SESSION_TIMEOUT:
+        st.session_state.logged_in = False
+        st.warning("Session expired. Please login again.")
+        st.stop()
+
+st.session_state.last_activity = time.time()
+
+# ---------------- UI ----------------
+st.title("🚨 AI Cybersecurity Monitoring System")
+
+menu = st.sidebar.selectbox("Menu", ["Login","Register","Dashboard","Logs"])
+
+# ---------------- LOGIN ----------------
+if menu == "Login":
+
+    st.info("Demo → admin / 1234 | analyst / soc123")
+
+    user = st.text_input("Username")
+    pwd = st.text_input("Password", type="password")
+
+    if st.session_state.login_attempts >= 5:
+        st.error("Too many failed attempts. Wait 30 seconds.")
+        time.sleep(3)
+        st.stop()
+
     if st.button("Login"):
-        if u in users and users[u] == p:
+
+        if not user or not pwd:
+            st.error("All fields required")
+            st.stop()
+
+        c.execute("SELECT * FROM users WHERE username=?", (user,))
+        result = c.fetchone()
+
+        if result and verify_password(pwd, result[1]):
             st.session_state.logged_in = True
-            st.success("Login successful")
+            st.session_state.username = user
+            st.session_state.role = result[2]
+            st.session_state.login_attempts = 0
+
+            log_event(user, "SUCCESS")
+
+            st.success(f"Welcome {user}")
+
         else:
+            st.session_state.login_attempts += 1
+            log_event(user, "FAILED")
             st.error("Invalid credentials")
 
-if not st.session_state.logged_in:
-    st.warning("Please login to access dashboard")
-    st.stop()
+# ---------------- REGISTER ----------------
+elif menu == "Register":
 
-# ---------------- Upload ----------------
-st.header("📂 Upload Login Dataset")
+    user = st.text_input("Username")
+    pwd = st.text_input("Password", type="password")
+    role = st.selectbox("Role", ["analyst","admin"])
 
-file = st.file_uploader("Upload CSV or Excel dataset", type=["csv","xlsx"])
+    if st.button("Register"):
 
-# ---------------- Dataset Info ----------------
-st.markdown("""
-<div class="dataset-box">
-<div class="dataset-title">⚠️ Dataset Requirements</div>
+        if not user or not pwd:
+            st.error("All fields required")
+            st.stop()
 
-• <b>User ID</b><br>
-• <b>Country</b><br>
-• <b>Login Successful</b> (True/False)<br>
-• <b>Round-Trip Time [ms]</b><br>
-• <b>Is Attack IP</b> (True/False)<br><br>
+        try:
+            c.execute("INSERT INTO users VALUES (?,?,?)",
+                      (user, hash_password(pwd), role))
+            conn.commit()
+            st.success("Account created")
+        except:
+            st.error("Username already exists")
 
-<b>Tip:</b> Clean dataset = better AI detection accuracy
-</div>
-""", unsafe_allow_html=True)
+# ---------------- DASHBOARD ----------------
+elif menu == "Dashboard":
 
-# ---------------- Data Processing ----------------
-if file is not None:
+    if not st.session_state.logged_in:
+        st.warning("Login required")
+        st.stop()
 
-    try:
-        if file.name.endswith(".csv"):
-            df = pd.read_csv(file)
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.success("Logged out")
+        st.stop()
+
+    st.subheader(f"User: {st.session_state.username} ({st.session_state.role})")
+
+    file = st.file_uploader("Upload dataset", type=["csv","xlsx"])
+
+    if file:
+
+        df = pd.read_csv(file) if file.name.endswith(".csv") else pd.read_excel(file)
+
+        required = ["User ID","Country","Login Successful","Round-Trip Time [ms]","Is Attack IP"]
+
+        if not all(col in df.columns for col in required):
+            st.error("Dataset format invalid")
+            st.stop()
+
+        df["Login Successful"] = df["Login Successful"].astype(int)
+        df["Is Attack IP"] = df["Is Attack IP"].astype(int)
+
+        features = df[["Round-Trip Time [ms]","Login Successful","Is Attack IP"]]
+
+        model = IsolationForest(contamination=0.1)
+        model.fit(features)
+
+        df["Anomaly_raw"] = model.predict(features)
+        df["Risk Score"] = (-model.decision_function(features)).round(3)
+
+        df["Anomaly"] = df["Anomaly_raw"].apply(lambda x: "Suspicious" if x==-1 else "Normal")
+
+        # -------- Explanation --------
+        def explain(row):
+            reasons = []
+            if row["Round-Trip Time [ms]"] > 500:
+                reasons.append("High latency")
+            if row["Login Successful"] == 0:
+                reasons.append("Failed login")
+            if row["Is Attack IP"] == 1:
+                reasons.append("Attack IP")
+            return ", ".join(reasons) if reasons else "Normal"
+
+        df["Explanation"] = df.apply(explain, axis=1)
+
+        suspicious = df[df["Anomaly"]=="Suspicious"]
+
+        if len(suspicious)>0:
+            st.error(f"🚨 {len(suspicious)} suspicious logins detected")
         else:
-            df = pd.read_excel(file)
-    except:
-        st.error("Error reading file")
+            st.success("System normal")
+
+        # -------- User Behavior --------
+        st.subheader("User Behavior Profiling")
+
+        profile = df.groupby("User ID").agg({
+            "Round-Trip Time [ms]":"mean",
+            "Login Successful":"sum",
+            "Is Attack IP":"sum"
+        }).reset_index()
+
+        st.dataframe(profile)
+
+        # -------- Results --------
+        st.subheader("Detection Results")
+        st.dataframe(df[["User ID","Country","Anomaly","Risk Score","Explanation"]])
+
+        st.subheader("Suspicious Events")
+        st.dataframe(suspicious)
+
+# ---------------- LOGS ----------------
+elif menu == "Logs":
+
+    if st.session_state.role != "admin":
+        st.error("Admin only")
         st.stop()
 
-    required_cols = [
-        "User ID", "Country",
-        "Login Successful", "Round-Trip Time [ms]", "Is Attack IP"
-    ]
-
-    if not all(col in df.columns for col in required_cols):
-        st.error("Dataset missing required columns")
-        st.stop()
-
-    st.subheader("Dataset Preview")
-    st.dataframe(df.head())
-
-    # ---------------- AI MODEL ----------------
-    df["Login Successful"] = df["Login Successful"].astype(int)
-    df["Is Attack IP"] = df["Is Attack IP"].astype(int)
-
-    features = df[[
-        "Round-Trip Time [ms]",
-        "Login Successful",
-        "Is Attack IP"
-    ]]
-
-    model = IsolationForest(contamination=0.1, random_state=42)
-    model.fit(features)
-
-    # Predictions
-    df["Anomaly_Label"] = model.predict(features)
-    df["Anomaly"] = df["Anomaly_Label"].apply(lambda x: "Suspicious" if x == -1 else "Normal")
-
-    # --------- Anomaly Score (NEW) ----------
-    df["Anomaly Score"] = model.decision_function(features)
-    df["Risk Score"] = (-df["Anomaly Score"]).round(3)
-
-    # ---------------- Alerts (NEW) ----------------
-    suspicious = df[df["Anomaly"] == "Suspicious"]
-
-    if len(suspicious) > 0:
-        st.error(f"🚨 ALERT: {len(suspicious)} suspicious login(s) detected!")
-    else:
-        st.success("✅ No suspicious activity detected")
-
-    # ---------------- Metrics ----------------
-    attack = df[df["Is Attack IP"] == 1]
-    failed = df[df["Login Successful"] == 0]
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Attack IP Events", len(attack))
-    c2.metric("Failed Logins", len(failed))
-    c3.metric("AI Suspicious Logins", len(suspicious))
-
-    # ---------------- Charts ----------------
-    col1, col2 = st.columns(2)
-
-    with col1:
-        pie = df["Login Successful"].value_counts().reset_index()
-        pie.columns = ["Status","Count"]
-        fig = px.pie(pie, values="Count", names="Status")
-        st.plotly_chart(fig, use_container_width=True)
-
-    with col2:
-        fig2 = px.histogram(df, x="Round-Trip Time [ms]")
-        st.plotly_chart(fig2, use_container_width=True)
-
-    # ---------------- Highlight Table (NEW) ----------------
-    def highlight_rows(row):
-        if row["Anomaly"] == "Suspicious":
-            return ["background-color: red"] * len(row)
-        return [""] * len(row)
-
-    st.subheader("🤖 AI Detection Results")
-    st.dataframe(
-        df[["User ID", "Country", "Anomaly", "Risk Score"]]
-        .style.apply(highlight_rows, axis=1)
-    )
-
-    # ---------------- Suspicious Section ----------------
-    st.subheader("🚨 Suspicious Logins")
-    st.dataframe(suspicious)
-
-# ---------------- Footer ----------------
-footer = """
-<div class="footer">
-AI Security Monitoring System | Demo Project | DB
-</div>
-"""
-st.markdown(footer, unsafe_allow_html=True)
+    logs = pd.read_sql("SELECT * FROM logs", conn)
+    st.dataframe(logs)
