@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 from sklearn.ensemble import IsolationForest
 import sqlite3
 import bcrypt
@@ -60,9 +61,10 @@ if "logged_in" not in st.session_state:
     st.session_state.role = ""
     st.session_state.login_attempts = 0
     st.session_state.last_activity = time.time()
+    st.session_state.menu = "Login"
 
 # ---------------- SESSION TIMEOUT ----------------
-SESSION_TIMEOUT = 600  # 10 minutes
+SESSION_TIMEOUT = 600
 
 if st.session_state.logged_in:
     if time.time() - st.session_state.last_activity > SESSION_TIMEOUT:
@@ -73,9 +75,48 @@ if st.session_state.logged_in:
 st.session_state.last_activity = time.time()
 
 # ---------------- UI ----------------
-st.title("🚨 AI Cybersecurity Monitoring System")
+st.markdown("""
+<style>
+.banner {
+background:linear-gradient(90deg,#06b6d4,#3b82f6,#9333ea);
+padding:10px;color:white;text-align:center;font-weight:bold;
+}
 
-menu = st.sidebar.selectbox("Menu", ["Login","Register","Dashboard","Logs"])
+.banner-scroll {
+background:linear-gradient(90deg,#06b6d4,#3b82f6,#9333ea);
+padding:8px;color:white;font-weight:bold;text-align:center;
+border-radius:8px;margin-bottom:10px;
+}
+
+section[data-testid="stSidebar"] * {
+cursor:pointer !important;
+}
+
+.footer {
+position:fixed;bottom:0;width:100%;background:#020617;
+color:white;text-align:center;padding:10px;
+border-top:1px solid #1e293b;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# -------- Banner --------
+st.markdown('<div class="banner">🚨 AI Cybersecurity Monitoring System</div>', unsafe_allow_html=True)
+
+# -------- Scrolling Line --------
+st.markdown(
+    '<div class="banner-scroll"><marquee>AI-Powered Anomaly Detection | Cyber Threat Monitoring | Security Intelligence Dashboard</marquee></div>',
+    unsafe_allow_html=True
+)
+
+# ---------------- MENU ----------------
+menu_options = ["Login","Register","Dashboard","Logs"]
+
+menu = st.sidebar.selectbox(
+    "Menu",
+    menu_options,
+    index=menu_options.index(st.session_state.menu)
+)
 
 # ---------------- LOGIN ----------------
 if menu == "Login":
@@ -86,8 +127,7 @@ if menu == "Login":
     pwd = st.text_input("Password", type="password")
 
     if st.session_state.login_attempts >= 5:
-        st.error("Too many failed attempts. Wait 30 seconds.")
-        time.sleep(3)
+        st.error("Too many failed attempts. Try later.")
         st.stop()
 
     if st.button("Login"):
@@ -104,11 +144,12 @@ if menu == "Login":
             st.session_state.username = user
             st.session_state.role = result[2]
             st.session_state.login_attempts = 0
+            st.session_state.menu = "Dashboard"
 
             log_event(user, "SUCCESS")
 
             st.success(f"Welcome {user}")
-
+            st.rerun()
         else:
             st.session_state.login_attempts += 1
             log_event(user, "FAILED")
@@ -144,12 +185,26 @@ elif menu == "Dashboard":
 
     if st.button("Logout"):
         st.session_state.logged_in = False
+        st.session_state.menu = "Login"
         st.success("Logged out")
         st.stop()
 
     st.subheader(f"User: {st.session_state.username} ({st.session_state.role})")
 
     file = st.file_uploader("Upload dataset", type=["csv","xlsx"])
+
+    # -------- Dataset Requirements --------
+    st.markdown("""
+    <div style='background:#111827;padding:15px;border-left:5px solid #22c55e;
+    border-radius:10px;margin-top:10px;box-shadow:0 0 10px rgba(34,197,94,0.4);'>
+    <b style='color:#22c55e;font-size:18px;'>⚠ Dataset Requirements</b><br><br>
+    • User ID<br>
+    • Country<br>
+    • Login Successful<br>
+    • Round-Trip Time [ms]<br>
+    • Is Attack IP<br>
+    </div>
+    """, unsafe_allow_html=True)
 
     if file:
 
@@ -171,7 +226,6 @@ elif menu == "Dashboard":
 
         df["Anomaly_raw"] = model.predict(features)
         df["Risk Score"] = (-model.decision_function(features)).round(3)
-
         df["Anomaly"] = df["Anomaly_raw"].apply(lambda x: "Suspicious" if x==-1 else "Normal")
 
         # -------- Explanation --------
@@ -194,15 +248,26 @@ elif menu == "Dashboard":
         else:
             st.success("System normal")
 
-        # -------- User Behavior --------
-        st.subheader("User Behavior Profiling")
+        # -------- Charts --------
+        col1, col2 = st.columns(2)
 
+        with col1:
+            pie = df["Login Successful"].value_counts().reset_index()
+            pie.columns = ["Status","Count"]
+            fig = px.pie(pie, values="Count", names="Status")
+            st.plotly_chart(fig, use_container_width=True)
+
+        with col2:
+            fig2 = px.histogram(df, x="Round-Trip Time [ms]")
+            st.plotly_chart(fig2, use_container_width=True)
+
+        # -------- Profiling --------
+        st.subheader("User Behavior Profiling")
         profile = df.groupby("User ID").agg({
             "Round-Trip Time [ms]":"mean",
             "Login Successful":"sum",
             "Is Attack IP":"sum"
         }).reset_index()
-
         st.dataframe(profile)
 
         # -------- Results --------
@@ -221,3 +286,11 @@ elif menu == "Logs":
 
     logs = pd.read_sql("SELECT * FROM logs", conn)
     st.dataframe(logs)
+
+# ---------------- FOOTER ----------------
+st.markdown("""
+<div class="footer">
+<b>Enterprise Cybersecurity Protection</b> | Threat monitoring - Security analytics - Incident response |
+Phone: +1-800-555-0148 | Email: enterprise-security@protectionlabs.io
+</div>
+""", unsafe_allow_html=True)
