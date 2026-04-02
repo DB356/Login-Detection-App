@@ -7,7 +7,7 @@ import bcrypt
 import time
 import re
 
-st.set_page_config(page_title="DB Corp Security System", layout="wide", page_icon=":shield:")
+st.set_page_config(page_title="DB Corp Security System", layout="wide")
 
 # -------- DATABASE --------
 conn = sqlite3.connect("users.db", check_same_thread=False)
@@ -62,34 +62,73 @@ if st.session_state.logged_in:
 
 st.session_state.last_activity = time.time()
 
+# -------- UI STYLE (modern touch only) --------
+st.markdown("""
+<style>
+body {background:#030712;}
+[data-testid="stSidebar"] {background:#020617;}
+[data-testid="stSidebar"] * {cursor:pointer !important;}
+
+.block-container {padding-top:1rem;}
+
+.card {
+    background:#020617;
+    border:1px solid #1e293b;
+    padding:16px;
+    border-radius:12px;
+}
+
+.title {
+    font-size:26px;
+    font-weight:700;
+    color:#38bdf8;
+}
+
+.sub {
+    color:#64748b;
+    font-size:12px;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # -------- HEADER --------
-st.title("DB Corp Cybersecurity Dashboard")
+st.markdown('<div class="title">DB Corp Cybersecurity Operations</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub">AI-Powered Threat Intelligence Platform</div>', unsafe_allow_html=True)
 
-# -------- SIDEBAR --------
+# -------- MENU (FIXED CLICK ISSUE) --------
 with st.sidebar:
-    if st.session_state.logged_in:
-        st.write(f"User: {st.session_state.username}")
-        nav_options = ["Dashboard", "Logs"]
-    else:
-        nav_options = ["Login", "Register"]
-
-    if st.session_state.page not in nav_options:
-        st.session_state.page = nav_options[0]
-
-    for option in nav_options:
-        if st.button(option):
-            st.session_state.page = option
-            st.rerun()
 
     if st.session_state.logged_in:
+        st.success(f"Logged in: {st.session_state.username}")
+
+        menu = st.radio(
+            "Navigation",
+            ["Dashboard", "Logs"],
+            index=["Dashboard", "Logs"].index(st.session_state.page)
+        )
+
         if st.button("Logout"):
             st.session_state.logged_in = False
             st.session_state.page = "Login"
             st.rerun()
 
+    else:
+        menu = st.radio(
+            "Navigation",
+            ["Login", "Register"],
+            index=["Login", "Register"].index(st.session_state.page)
+        )
+
+st.session_state.page = menu
+
 # -------- LOGIN --------
-if st.session_state.page == "Login":
-    st.info("Demo: analyst / soc123")
+if menu == "Login":
+
+    if st.session_state.logged_in:
+        st.warning("Already logged in")
+        st.stop()
+
+    st.info("Demo → analyst / soc123")
 
     user = st.text_input("Username")
     pwd = st.text_input("Password", type="password")
@@ -118,13 +157,18 @@ if st.session_state.page == "Login":
             st.error("Invalid credentials")
 
 # -------- REGISTER --------
-elif st.session_state.page == "Register":
+elif menu == "Register":
+
+    if st.session_state.logged_in:
+        st.warning("Logout first to create new account")
+        st.stop()
+
     user = st.text_input("Username")
     pwd = st.text_input("Password", type="password")
 
     if st.button("Register"):
         if not strong_password(pwd):
-            st.error("Weak password")
+            st.error("Password must have 6+ chars, 1 uppercase, 1 number")
         else:
             try:
                 c.execute("INSERT INTO users VALUES (?,?,?)", (user, hash_password(pwd), "analyst"))
@@ -134,48 +178,70 @@ elif st.session_state.page == "Register":
                 st.error("Username exists")
 
 # -------- DASHBOARD --------
-elif st.session_state.page == "Dashboard":
+elif menu == "Dashboard":
 
     if not st.session_state.logged_in:
         st.warning("Login first")
         st.stop()
 
-    file = st.file_uploader("Upload Auth Logs", type=["csv", "xlsx"])
+    file = st.file_uploader("Upload Authentication Logs", type=["csv","xlsx"])
 
     if file:
         df = pd.read_csv(file) if file.name.endswith(".csv") else pd.read_excel(file)
 
-        required = ["User ID", "Country", "Login Successful", "Round-Trip Time [ms]", "Is Attack IP"]
+        required = ["User ID","Country","Login Successful","Round-Trip Time [ms]","Is Attack IP"]
         if not all(col in df.columns for col in required):
-            st.error("Invalid dataset")
+            st.error("Dataset format invalid")
             st.stop()
 
         df["Login Successful"] = df["Login Successful"].astype(int)
         df["Is Attack IP"] = df["Is Attack IP"].astype(int)
 
-        features = df[["Round-Trip Time [ms]", "Login Successful", "Is Attack IP"]]
+        features = df[["Round-Trip Time [ms]","Login Successful","Is Attack IP"]]
 
         model = IsolationForest(contamination=0.1)
         model.fit(features)
 
-        df["Anomaly"] = model.predict(features)
-        df["Anomaly"] = df["Anomaly"].apply(lambda x: "Suspicious" if x == -1 else "Normal")
+        df["Anomaly_raw"] = model.predict(features)
+        df["Risk Score"] = (-model.decision_function(features)).round(3)
 
-        st.subheader("Results")
+        def explain(row):
+            reasons = []
+            if row["Round-Trip Time [ms]"] > 500:
+                reasons.append("High latency")
+            if row["Login Successful"] == 0:
+                reasons.append("Failed login")
+            if row["Is Attack IP"] == 1:
+                reasons.append("Known attack IP")
+            if row["Risk Score"] > 0.5:
+                reasons.append("Model anomaly score high")
+            return ", ".join(reasons) if reasons else "Normal behavior"
+
+        df["Anomaly"] = df["Anomaly_raw"].apply(lambda x: "Suspicious" if x==-1 else "Normal")
+        df["Reason"] = df.apply(explain, axis=1)
+        df["Severity"] = df["Risk Score"].apply(lambda s: "High" if s>0.6 else "Medium" if s>0.3 else "Low")
+
+        suspicious = df[df["Anomaly"]=="Suspicious"]
+
+        st.metric("Suspicious Logins", len(suspicious))
+
         st.dataframe(df)
 
-        st.plotly_chart(px.pie(df, names="Login Successful"))
-        st.plotly_chart(px.histogram(df, x="Round-Trip Time [ms]"))
+        col1, col2 = st.columns(2)
+        with col1:
+            st.plotly_chart(px.pie(df, names="Login Successful"), use_container_width=True)
+        with col2:
+            st.plotly_chart(px.histogram(df, x="Round-Trip Time [ms]"), use_container_width=True)
 
 # -------- LOGS --------
-elif st.session_state.page == "Logs":
+elif menu == "Logs":
 
     if not st.session_state.logged_in:
         st.error("Login required")
         st.stop()
 
     if st.session_state.role != "admin":
-        st.error("Admin only")
+        st.error("Access denied (Admin only)")
         st.stop()
 
     logs = pd.read_sql("SELECT * FROM logs", conn)
