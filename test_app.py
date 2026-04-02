@@ -7,7 +7,7 @@ import bcrypt
 import time
 import re
 
-st.set_page_config(page_title=“DB Corp Security System”, layout=“wide”, page_icon=“🛡️”)
+st.set_page_config(page_title=“DB Corp Security System”, layout=“wide”, page_icon=“shield”)
 
 # –––––––– DATABASE ––––––––
 
