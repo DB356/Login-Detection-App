@@ -56,7 +56,6 @@ if "page" not in st.session_state:
 if st.session_state.logged_in:
     if time.time() - st.session_state.last_activity > 600:
         st.session_state.logged_in = False
-        st.session_state.page = "Login"
         st.warning("Session expired. Please login again.")
         st.stop()
 
@@ -68,9 +67,10 @@ st.markdown("""
 [data-testid="stSidebar"] * { cursor: pointer !important; }
 
 .cyber-header {
-font-size:28px;
-color:#22c55e;
-text-shadow:0 0 10px #22c55e;
+font-size:30px;
+color:#4ade80;
+font-weight:700;
+text-shadow:0 0 12px #22c55e, 0 0 25px #16a34a;
 }
 
 .banner-scroll {
@@ -94,7 +94,7 @@ with col2:
 
 st.markdown('<div class="banner-scroll"><marquee>AI-Powered Anomaly Detection | Cyber Threat Monitoring | Security Intelligence Dashboard</marquee></div>', unsafe_allow_html=True)
 
-# ---------------- MENU (FIXED) ----------------
+# ---------------- MENU ----------------
 with st.sidebar:
 
     if st.session_state.logged_in:
@@ -184,6 +184,9 @@ elif menu == "Dashboard":
         st.stop()
 
     file = st.file_uploader("Upload Authentication Logs", type=["csv","xlsx"])
+
+    # ✅ DATASET REQUIREMENT RESTORED
+    st.caption("Required columns: User ID, Country, Login Successful, Round-Trip Time [ms], Is Attack IP")
 
     if file:
         df = pd.read_csv(file) if file.name.endswith(".csv") else pd.read_excel(file)
