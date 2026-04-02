@@ -56,38 +56,44 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.username = ""
     st.session_state.role = ""
-    st.session_state.menu = "Login"
-    st.session_state.last_activity = time.time()
-
-# ---------------- SESSION TIMEOUT ----------------
-if st.session_state.logged_in:
-    if time.time() - st.session_state.last_activity > 600:
-        st.session_state.logged_in = False
-        st.warning("Session expired")
-        st.stop()
-
-st.session_state.last_activity = time.time()
 
 # ---------------- UI ----------------
 st.markdown("""
 <style>
+/* FIX CURSOR PROPERLY */
+[data-testid="stSidebar"] button,
+[data-testid="stSidebar"] div[role="button"] {
+    cursor: pointer !important;
+}
+
+/* Header */
 .cyber-header {
 font-size:28px;
 color:#22c55e;
 text-shadow:0 0 10px #22c55e;
 }
+
+/* Banner */
 .banner-scroll {
 background:linear-gradient(90deg,#06b6d4,#3b82f6,#9333ea);
 padding:8px;color:white;text-align:center;
 border-radius:8px;margin-bottom:10px;
 }
+
+/* Footer */
 .footer {
-position:fixed;bottom:0;width:100%;background:#020617;
-color:white;text-align:center;padding:10px;
+position:fixed;
+bottom:0;
+width:100%;
+background:#020617;
+color:white;
+text-align:center;
+padding:10px;
 }
 </style>
 """, unsafe_allow_html=True)
 
+# ---------------- HEADER ----------------
 col1, col2 = st.columns([1,6])
 with col1:
     st.image("https://cdn-icons-png.flaticon.com/512/3064/3064197.png", width=80)
@@ -104,12 +110,14 @@ menu = st.sidebar.selectbox("Menu", ["Login","Register","Dashboard","Logs"])
 
 # ---------------- LOGIN ----------------
 if menu == "Login":
+
     st.info("Demo → admin / 1234 | analyst / soc123")
 
     user = st.text_input("Username")
     pwd = st.text_input("Password", type="password")
 
     if st.button("Login"):
+
         c.execute("SELECT * FROM users WHERE username=?", (user,))
         result = c.fetchone()
 
@@ -117,15 +125,18 @@ if menu == "Login":
             st.session_state.logged_in = True
             st.session_state.username = user
             st.session_state.role = result[2]
-            st.session_state.menu = "Dashboard"
+
             log_event(user, "SUCCESS")
-            st.rerun()
+
+            st.success("Login successful. Now open Dashboard from menu.")
+
         else:
             log_event(user, "FAILED")
             st.error("Invalid credentials")
 
 # ---------------- REGISTER ----------------
 elif menu == "Register":
+
     user = st.text_input("Username")
     pwd = st.text_input("Password", type="password")
 
@@ -142,18 +153,17 @@ elif menu == "Register":
 elif menu == "Dashboard":
 
     if not st.session_state.logged_in:
-        st.warning("Login required")
+        st.warning("Login first")
         st.stop()
+
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.rerun()
 
     file = st.file_uploader("Upload Authentication Logs", type=["csv","xlsx"])
 
     if file:
         df = pd.read_csv(file) if file.name.endswith(".csv") else pd.read_excel(file)
-
-        required = ["User ID","Country","Login Successful","Round-Trip Time [ms]","Is Attack IP"]
-        if not all(col in df.columns for col in required):
-            st.error("Dataset format invalid")
-            st.stop()
 
         df["Login Successful"] = df["Login Successful"].astype(int)
         df["Is Attack IP"] = df["Is Attack IP"].astype(int)
@@ -166,7 +176,6 @@ elif menu == "Dashboard":
         df["Anomaly_raw"] = model.predict(features)
         df["Risk Score"] = (-model.decision_function(features)).round(3)
 
-        # -------- Explanation --------
         def explain(row):
             reasons = []
             if row["Round-Trip Time [ms]"] > 500:
@@ -175,14 +184,11 @@ elif menu == "Dashboard":
                 reasons.append("Failed login")
             if row["Is Attack IP"] == 1:
                 reasons.append("Attack IP")
-            if row["Risk Score"] > 0.5:
-                reasons.append("Model anomaly")
             return ", ".join(reasons) if reasons else "Normal"
 
         df["Anomaly"] = df["Anomaly_raw"].apply(lambda x: "Suspicious" if x==-1 else "Normal")
         df["Reason"] = df.apply(explain, axis=1)
 
-        # -------- Severity --------
         def severity(score):
             if score > 0.6:
                 return "High"
@@ -197,38 +203,30 @@ elif menu == "Dashboard":
 
         st.metric("Suspicious Logins", len(suspicious))
 
-        st.subheader("Pinpointed Anomaly Detection")
         st.dataframe(df[["User ID","Country","Anomaly","Risk Score","Severity","Reason"]])
-
-        st.subheader("Suspicious Events")
         st.dataframe(suspicious)
 
-        # -------- Charts --------
         col1, col2 = st.columns(2)
         with col1:
             st.plotly_chart(px.pie(df, names="Login Successful"))
         with col2:
             st.plotly_chart(px.histogram(df, x="Round-Trip Time [ms]"))
 
-        # -------- Timeline (FIXED SAFE) --------
-        st.subheader("📈 Attack Timeline")
-
+        # Timeline
         df = df.reset_index(drop=True)
         df["Time"] = pd.date_range(start="2024-01-01", periods=len(df), freq="min")
+        df["Suspicious"] = df["Anomaly"].apply(lambda x: 1 if x=="Suspicious" else 0)
 
-        timeline = df.copy()
-        timeline["Suspicious"] = timeline["Anomaly"].apply(lambda x: 1 if x=="Suspicious" else 0)
+        st.plotly_chart(px.line(df, x="Time", y="Suspicious"))
 
-        fig = px.line(timeline, x="Time", y="Suspicious", title="Suspicious Activity Over Time")
-        st.plotly_chart(fig, use_container_width=True)
-
-        # -------- Download --------
+        # Download
         csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button("📄 Download Report", csv, "anomaly_report.csv")
+        st.download_button("Download Report", csv, "report.csv")
 
 # ---------------- LOGS ----------------
 elif menu == "Logs":
-    if st.session_state.role != "admin":
+
+    if not st.session_state.logged_in or st.session_state.role != "admin":
         st.error("Admin only")
         st.stop()
 
@@ -238,7 +236,6 @@ elif menu == "Logs":
 # ---------------- FOOTER ----------------
 st.markdown("""
 <div class="footer">
-Enterprise Cybersecurity Protection | Threat Monitoring | Incident Response |
-Email: enterprise-security@protectionlabs.io
+Enterprise Cybersecurity Protection | Threat Monitoring | Incident Response
 </div>
 """, unsafe_allow_html=True)
