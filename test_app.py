@@ -17,8 +17,12 @@ c.execute("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password
 c.execute("CREATE TABLE IF NOT EXISTS logs (user TEXT, time TEXT, status TEXT)")
 conn.commit()
 
-c.execute("DELETE FROM users WHERE username='admin'")
-conn.commit()
+# 🔴 FIXED (no crash now)
+try:
+    c.execute("DELETE FROM users WHERE username='admin'")
+    conn.commit()
+except:
+    pass
 
 # ---------------- SECURITY ----------------
 def hash_password(password):
@@ -60,48 +64,29 @@ if st.session_state.logged_in:
 
 st.session_state.last_activity = time.time()
 
-# ---------------- UI FIX (HEADER OVERLAP FIXED) ----------------
+# ---------------- UI ----------------
 st.markdown("""
 <style>
-
-/* FIX: remove top overlap */
-.block-container {
-    padding-top: 3rem !important;
-}
-
-/* FIX: ensure header not hidden */
-header {visibility: hidden;}
+.block-container {padding-top: 3rem !important;}
 
 .cyber-header {
-    font-size:34px;
-    color:#22ff88;
-    font-weight:800;
-    letter-spacing:1px;
-    text-shadow:0 0 10px #22ff88, 0 0 25px #16a34a;
+font-size:34px;
+color:#22ff88;
+font-weight:800;
+text-shadow:0 0 10px #22ff88, 0 0 25px #16a34a;
 }
 
 .banner-scroll {
-    background:linear-gradient(90deg,#06b6d4,#3b82f6,#9333ea);
-    padding:8px;
-    color:white;
-    text-align:center;
-    border-radius:8px;
-    margin-bottom:10px;
+background:linear-gradient(90deg,#06b6d4,#3b82f6,#9333ea);
+padding:8px;color:white;text-align:center;border-radius:8px;margin-bottom:10px;
 }
 
 .footer {
-    position:fixed;
-    bottom:0;
-    width:100%;
-    background:#020617;
-    color:white;
-    text-align:center;
-    padding:10px;
+position:fixed;bottom:0;width:100%;background:#020617;color:white;text-align:center;padding:10px;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- HEADER ----------------
 col1, col2 = st.columns([1,6])
 with col1:
     st.image("https://cdn-icons-png.flaticon.com/512/3064/3064197.png", width=80)
@@ -238,3 +223,24 @@ elif menu == "Dashboard":
 
         st.metric("Suspicious Logins", len(df[df["Anomaly"]=="Suspicious"]))
         st.dataframe(df)
+
+# ---------------- LOGS ----------------
+elif menu == "Logs":
+
+    if not st.session_state.logged_in:
+        st.error("Login required")
+        st.stop()
+
+    if st.session_state.role != "admin":
+        st.error("Access denied (Admin only)")
+        st.stop()
+
+    logs = pd.read_sql("SELECT * FROM logs", conn)
+    st.dataframe(logs)
+
+# ---------------- FOOTER ----------------
+st.markdown("""
+<div class="footer">
+Enterprise Cybersecurity Protection | Threat Monitoring | Incident Response
+</div>
+""", unsafe_allow_html=True)
