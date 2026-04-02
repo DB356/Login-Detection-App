@@ -416,7 +416,7 @@ h1, h2, h3 {
 st.markdown(”””
 
 <div class="main-header">
-    <div class="header-logo">🛡️</div>
+    <div class="header-logo">🛡</div>
     <div>
         <div class="header-title">DB Corp Security Operations</div>
         <div class="header-subtitle">AI-Powered Threat Intelligence Platform</div>
@@ -427,7 +427,7 @@ st.markdown(”””
 st.markdown(”””
 
 <div class="ticker">
-▶ &nbsp; AI-POWERED ANOMALY DETECTION &nbsp; · &nbsp; REAL-TIME THREAT MONITORING &nbsp; · &nbsp; INCIDENT RESPONSE ACTIVE &nbsp; · &nbsp; SECURITY INTELLIGENCE v2.0
+> &nbsp; AI-POWERED ANOMALY DETECTION &nbsp; · &nbsp; REAL-TIME THREAT MONITORING &nbsp; · &nbsp; INCIDENT RESPONSE ACTIVE &nbsp; · &nbsp; SECURITY INTELLIGENCE v2.0
 </div>
 """, unsafe_allow_html=True)
 
@@ -470,14 +470,14 @@ for option in nav_options:
     is_active = st.session_state.page == option
     active_class = "active" if is_active else ""
 
-    if st.button(f"{icons.get(option, '•')}  {option}", key=f"nav_{option}", use_container_width=True):
+    if st.button(f"{icons.get(option, '*')}  {option}", key=f"nav_{option}", use_container_width=True):
         st.session_state.page = option
         st.rerun()
 
 # Logout button at bottom if logged in
 if st.session_state.logged_in:
     st.markdown('<div class="sidebar-section">SESSION</div>', unsafe_allow_html=True)
-    if st.button("⏻  Logout", key="nav_logout", use_container_width=True):
+    if st.button("O  Logout", key="nav_logout", use_container_width=True):
         st.session_state.logged_in = False
         st.session_state.username = ""
         st.session_state.role = ""
@@ -500,7 +500,7 @@ if st.session_state.logged_in:
 st.markdown('<div class="login-card">', unsafe_allow_html=True)
 st.markdown('<div class="login-title">Welcome Back</div>', unsafe_allow_html=True)
 st.markdown('<div class="login-subtitle">SIGN IN TO YOUR ACCOUNT</div>', unsafe_allow_html=True)
-st.markdown('<div class="demo-badge">🔑 Demo credentials → analyst / soc123</div>', unsafe_allow_html=True)
+st.markdown('<div class="demo-badge">🔑 Demo credentials -> analyst / soc123</div>', unsafe_allow_html=True)
 
 user = st.text_input("Username", placeholder="Enter username")
 pwd = st.text_input("Password", type="password", placeholder="Enter password")
@@ -509,7 +509,7 @@ if st.session_state.login_attempts >= 5:
     st.error("🚫 Too many failed attempts. Please try later.")
     st.stop()
 
-if st.button("Sign In →", use_container_width=True):
+if st.button("Sign In ->", use_container_width=True):
     c.execute("SELECT * FROM users WHERE username=?", (user,))
     result = c.fetchone()
 
@@ -546,9 +546,9 @@ st.markdown('<div class="login-subtitle">REGISTER A NEW ANALYST ACCOUNT</div>', 
 user = st.text_input("Username", placeholder="Choose a username")
 pwd = st.text_input("Password", type="password", placeholder="Min 6 chars, 1 uppercase, 1 number")
 
-if st.button("Create Account →", use_container_width=True):
+if st.button("Create Account ->", use_container_width=True):
     if not strong_password(pwd):
-        st.error("⚠️ Password must have 6+ chars, 1 uppercase, 1 number")
+        st.error("⚠ Password must have 6+ chars, 1 uppercase, 1 number")
     else:
         try:
             c.execute("INSERT INTO users VALUES (?,?,?)", (user, hash_password(pwd), "analyst"))
@@ -578,7 +578,7 @@ if file:
 
     required = ["User ID","Country","Login Successful","Round-Trip Time [ms]","Is Attack IP"]
     if not all(col in df.columns for col in required):
-        st.error("⚠️ Dataset format invalid. Required columns: " + ", ".join(required))
+        st.error("⚠ Dataset format invalid. Required columns: " + ", ".join(required))
         st.stop()
 
     df["Login Successful"] = df["Login Successful"].astype(int)
@@ -671,7 +671,7 @@ if not st.session_state.logged_in:
     st.stop()
 
 if st.session_state.role != "admin":
-    st.error("🚫 Access Denied — Admin privileges required")
+    st.error("🚫 Access Denied - Admin privileges required")
     st.stop()
 
 st.markdown("### 📋 System Access Logs")
