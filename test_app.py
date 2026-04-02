@@ -17,6 +17,10 @@ c.execute("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password
 c.execute("CREATE TABLE IF NOT EXISTS logs (user TEXT, time TEXT, status TEXT)")
 conn.commit()
 
+# 🔴 FORCE REMOVE OLD ADMIN (Cloud-safe)
+c.execute("DELETE FROM users WHERE username='admin'")
+conn.commit()
+
 # ---------------- SECURITY ----------------
 def hash_password(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt())
@@ -45,11 +49,12 @@ if "logged_in" not in st.session_state:
     st.session_state.login_attempts = 0
     st.session_state.last_activity = time.time()
 
-# ---------------- SESSION TIMEOUT ----------------
-SESSION_TIMEOUT = 600  # 10 min
+if "page" not in st.session_state:
+    st.session_state.page = "Login"
 
+# ---------------- SESSION TIMEOUT ----------------
 if st.session_state.logged_in:
-    if time.time() - st.session_state.last_activity > SESSION_TIMEOUT:
+    if time.time() - st.session_state.last_activity > 600:
         st.session_state.logged_in = False
         st.warning("Session expired. Please login again.")
         st.stop()
@@ -87,7 +92,15 @@ with col2:
 st.markdown('<div class="banner-scroll"><marquee>AI-Powered Anomaly Detection | Cyber Threat Monitoring | Security Intelligence Dashboard</marquee></div>', unsafe_allow_html=True)
 
 # ---------------- MENU ----------------
-menu = st.sidebar.selectbox("Menu", ["Login","Register","Dashboard","Logs"])
+menu_options = ["Login","Register","Dashboard","Logs"]
+
+menu = st.sidebar.selectbox(
+    "Menu",
+    menu_options,
+    index=menu_options.index(st.session_state.page)
+)
+
+st.session_state.page = menu
 
 # ---------------- LOGIN ----------------
 if menu == "Login":
@@ -101,25 +114,24 @@ if menu == "Login":
         st.stop()
 
     if st.button("Login"):
-        try:
-            c.execute("SELECT * FROM users WHERE username=?", (user,))
-            result = c.fetchone()
+        c.execute("SELECT * FROM users WHERE username=?", (user,))
+        result = c.fetchone()
 
-            if result and verify_password(pwd, result[1]):
-                st.session_state.logged_in = True
-                st.session_state.username = user
-                st.session_state.role = result[2]
-                st.session_state.login_attempts = 0
+        if result and verify_password(pwd, result[1]):
+            st.session_state.logged_in = True
+            st.session_state.username = user
+            st.session_state.role = result[2]
+            st.session_state.login_attempts = 0
 
-                log_event(user, "SUCCESS")
+            log_event(user, "SUCCESS")
 
-                st.success("Login successful. Go to Dashboard.")
-            else:
-                st.session_state.login_attempts += 1
-                log_event(user, "FAILED")
-                st.error("Invalid credentials")
-        except:
-            st.error("Login error")
+            # ✅ Proper redirect
+            st.session_state.page = "Dashboard"
+            st.rerun()
+        else:
+            st.session_state.login_attempts += 1
+            log_event(user, "FAILED")
+            st.error("Invalid credentials")
 
 # ---------------- REGISTER ----------------
 elif menu == "Register":
@@ -146,6 +158,7 @@ elif menu == "Dashboard":
 
     if st.button("Logout"):
         st.session_state.logged_in = False
+        st.session_state.page = "Login"
         st.rerun()
 
     file = st.file_uploader("Upload Authentication Logs", type=["csv","xlsx"])
